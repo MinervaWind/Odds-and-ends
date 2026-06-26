@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聊天整理工具</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f5f2;
+    --surface: #ffffff;
+    --border: #e2ddd8;
+    --accent: #6b7c6e;
+    --accent-soft: #e8ede9;
+    --text: #2c2c2c;
+    --text-dim: #888;
+    --mono: 'Courier New', 'Noto Sans Mono CJK SC', monospace;
+    --sans: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 32px 20px;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 24px;
+    text-transform: uppercase;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    text-transform: uppercase;
+  }
+
+  textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    background: transparent;
+    min-height: 340px;
+  }
+
+  textarea::placeholder { color: #bbb; }
+
+  .mapping-section {
+    max-width: 1100px;
+    margin: 0 auto 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+
+  .mapping-header {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mapping-rows { display: flex; flex-direction: column; gap: 6px; }
+
+  .mapping-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .mapping-row input {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 9px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    width: 140px;
+    transition: border-color 0.15s;
+  }
+
+  .mapping-row input:focus { border-color: var(--accent); }
+
+  .arrow { color: var(--text-dim); font-size: 13px; flex-shrink: 0; }
+
+  .btn-add {
+    margin-top: 8px;
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: all 0.15s;
+    width: fit-content;
+  }
+
+  .btn-add:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-remove {
+    background: none; border: none; color: var(--border);
+    cursor: pointer; font-size: 16px; padding: 0 2px;
+    line-height: 1; transition: color 0.15s;
+  }
+
+  .btn-remove:hover { color: #c0392b; }
+
+  /* 选项栏 */
+  .options-bar {
+    max-width: 1100px;
+    margin: 0 auto 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .opt-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .seg button {
+    background: var(--surface);
+    border: none;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--sans);
+    border-right: 1px solid var(--border);
+    transition: all 0.15s;
+  }
+
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: white; }
+  .seg button:not(.active):hover { background: var(--accent-soft); }
+
+  .opt-hint {
+    font-size: 11px;
+    color: #bbb;
+    letter-spacing: 0;
+  }
+
+  .actions {
+    max-width: 1100px;
+    margin: 14px auto 0;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .btn-run {
+    background: var(--accent); color: white; border: none;
+    border-radius: 5px; padding: 9px 24px; font-size: 13px;
+    font-weight: 600; cursor: pointer; font-family: var(--sans);
+    letter-spacing: 0.04em; transition: opacity 0.15s;
+  }
+
+  .btn-run:hover { opacity: 0.85; }
+
+  .btn-copy {
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid transparent; border-radius: 5px;
+    padding: 9px 18px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: var(--sans);
+    letter-spacing: 0.04em; transition: all 0.15s;
+  }
+
+  .btn-copy:hover { border-color: var(--accent); }
+  .btn-copy.copied { background: var(--accent); color: white; }
+
+  .status { font-size: 12px; color: var(--text-dim); margin-left: auto; }
+</style>
+</head>
+<body>
+
+<div style="max-width:1100px;margin:0 auto 16px;">
+  <h1>聊天整理 ✦</h1>
+</div>
+
+<div class="mapping-section">
+  <div class="mapping-header">
+    名称替换
+    <span style="font-weight:400;color:#bbb;font-size:11px;letter-spacing:0;">自动识别 · 留空则保持原名</span>
+  </div>
+  <div class="mapping-rows" id="mappingRows"></div>
+  <button class="btn-add" onclick="addMappingRow()">＋ 添加</button>
+</div>
+
+<div class="options-bar">
+  <span class="opt-label">输出格式</span>
+  <div class="seg" id="mdSeg">
+    <button data-md="on" class="active">Markdown</button>
+    <button data-md="off">纯文本</button>
+  </div>
+  <span style="color:var(--border);font-size:13px;margin:0 4px;">│</span>
+  <span class="opt-label">连续合并</span>
+  <div class="seg" id="mergeSeg">
+    <button data-mode="slash" class="active">加 /</button>
+    <button data-mode="space">加空格</button>
+    <button data-mode="period">加句号</button>
+    <button data-mode="none">不合并</button>
+  </div>
+  <span class="opt-hint">同一人连续发言时如何拼接（含图片的消息永不合并）</span>
+</div>
+
+<div class="layout">
+  <div class="panel">
+    <div class="panel-header">
+      原始聊天记录
+      <span id="detectStatus" style="font-weight:400;color:#bbb;font-size:11px;letter-spacing:0;"></span>
+    </div>
+    <textarea id="input" placeholder="粘贴 QQ 聊天记录……" oninput="autoDetect()"></textarea>
+  </div>
+  <div class="panel">
+    <div class="panel-header">整理结果（Markdown）</div>
+    <textarea id="output" readonly placeholder="处理后的内容会出现在这里"></textarea>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn-run" onclick="run()">整理</button>
+  <button class="btn-copy" id="copyBtn" onclick="copyOutput()">复制结果</button>
+  <span class="status" id="statusMsg"></span>
+</div>
+
+<script>
+// ============ 名称映射 ============
+let mappings = [];
+let detectedNames = new Set();
+
+function renderMappings() {
+  const container = document.getElementById('mappingRows');
+  container.innerHTML = '';
+  if (mappings.length === 0) {
+    container.innerHTML = '<div style="font-size:12px;color:#bbb;padding:2px 0;">粘贴聊天后自动识别名称，或手动添加</div>';
+    return;
+  }
+  mappings.forEach((m, i) => {
+    const row = document.createElement('div');
+    row.className = 'mapping-row';
+    row.innerHTML =
+      '<input type="text" value="' + esc(m.from) + '" placeholder="原网名" oninput="mappings[' + i + '].from=this.value" />' +
+      '<span class="arrow">→</span>' +
+      '<input type="text" value="' + esc(m.to) + '" placeholder="改成" oninput="mappings[' + i + '].to=this.value" />' +
+      '<button class="btn-remove" onclick="removeMapping(' + i + ')" title="删除">×</button>';
+    container.appendChild(row);
+  });
+}
+
+function esc(s) { return (s || '').replace(/"/g, '&quot;'); }
+
+function addMappingRow() {
+  mappings.push({ from: '', to: '' });
+  renderMappings();
+}
+
+function removeMapping(i) {
+  mappings.splice(i, 1);
+  renderMappings();
+}
+
+// ============ 自动检测名称 ============
+// QQ 发言人行：名字 [可选(QQ号/备注)] 空格 HH:MM:SS
+const SPEAKER_RE = /^(.+?)\s+\d{1,2}:\d{2}:\d{2}\s*$/;
+
+function autoDetect() {
+  const text = document.getElementById('input').value;
+  const lines = text.split('\n');
+  const found = new Set();
+  for (const line of lines) {
+    const m = line.match(SPEAKER_RE);
+    if (m) found.add(m[1].trim());
+  }
+  let added = 0;
+  for (const name of found) {
+    if (!detectedNames.has(name) && !mappings.find(m => m.from === name)) {
+      mappings.push({ from: name, to: '' });
+      added++;
+    }
+    detectedNames.add(name);
+  }
+  if (added > 0) renderMappings();
+  document.getElementById('detectStatus').textContent =
+    found.size ? '检测到 ' + found.size + ' 个名称' : '';
+}
+
+// ============ MD 模式开关 ============
+let mdMode = true;
+document.getElementById('mdSeg').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mdMode = e.target.dataset.md === 'on';
+  document.querySelectorAll('#mdSeg button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+});
+
+// ============ 合并模式开关 ============
+let mergeMode = 'slash';
+document.getElementById('mergeSeg').addEventListener('click', e => {
+  if (e.target.tagName !== 'BUTTON') return;
+  mergeMode = e.target.dataset.mode;
+  document.querySelectorAll('#mergeSeg button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+});
+
+// ============ 核心处理 ============
+function buildNameMap() {
+  const map = {};
+  for (const { from, to } of mappings) {
+    if (from.trim()) map[from.trim()] = to.trim() || from.trim();
+  }
+  return map;
+}
+
+const UNSUPPORTED_RE = /\[不支持的元素类型\]/g;
+
+function run() {
+  const raw = document.getElementById('input').value.replace(/\r/g, '');
+  if (!raw.trim()) { setStatus('请先粘贴聊天内容'); return; }
+
+  const nameMap = buildNameMap();
+  const lines = raw.split('\n');
+
+  // ---- Step 1: 解析为结构化消息 ----
+  // 规则：遇到「名字 时间戳」行开启一条新消息，
+  // 之后所有行都属于这条消息的内容，直到下一个「名字 时间戳」行。
+  // 这样能完整捕获单条消息内部的多行（如转述对话）。
+  const messages = [];
+  let current = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+$/, ''); // 去尾部空白，保留行首
+    const m = line.trim().match(SPEAKER_RE);
+    if (m) {
+      // 新消息开始
+      if (current) messages.push(current);
+      const rawSpeaker = m[1].trim();
+      current = {
+        speaker: nameMap[rawSpeaker] || rawSpeaker,
+        lines: []  // 内容行数组
+      };
+    } else if (current) {
+      // 属于当前消息的内容行
+      if (line.trim() !== '') current.lines.push(line.trim());
+    }
+    // current 为空且非发言人行 → 忽略（开头杂行）
+  }
+  if (current) messages.push(current);
+
+  // ---- Step 2: 清理内容 ----
+  // 删除 [不支持的元素类型]，保留 [图片]
+  const cleaned = [];
+  for (const msg of messages) {
+    const newLines = msg.lines
+      .map(l => l.replace(UNSUPPORTED_RE, '').trim())
+      .filter(l => l !== '');
+    if (newLines.length > 0) {
+      cleaned.push({ speaker: msg.speaker, lines: newLines });
+    }
+  }
+
+  // 标记每条消息是否含图片（含图片的不参与合并）
+  for (const msg of cleaned) {
+    msg.hasImage = msg.lines.some(l => l.includes('[图片]'));
+    msg.multiline = msg.lines.length > 1;
+  }
+
+  // ---- Step 3: 合并同一发言人连续消息 ----
+  // 仅合并「单行、无图片」的消息；多行或含图片的消息独立成块。
+  const merged = [];
+  for (const msg of cleaned) {
+    const last = merged[merged.length - 1];
+    const canMergeThis = !msg.hasImage && !msg.multiline && mergeMode !== 'none';
+    const canMergeLast = last && !last.hasImage && !last.multiline;
+
+    if (last && last.speaker === msg.speaker && canMergeThis && canMergeLast) {
+      // 合并到上一条的内容行（两者都是单行）
+      const prev = last.lines[0];
+      const cur = msg.lines[0];
+      last.lines[0] = joinByMode(prev, cur);
+    } else {
+      merged.push({
+        speaker: msg.speaker,
+        lines: msg.lines.slice(),
+        hasImage: msg.hasImage,
+        multiline: msg.multiline
+      });
+    }
+  }
+
+  // ---- Step 4: 格式化输出 ----
+  // MD模式：**名字**：首行，后续行 > 引用，引用块后补空行
+  // 纯文本模式：名字：首行，后续行直接换行，不加任何 md 语法
+  const out = [];
+  for (let i = 0; i < merged.length; i++) {
+    const msg = merged[i];
+    const usedQuote = mdMode && msg.lines.length > 1;
+    const speakerPrefix = mdMode
+      ? '**' + msg.speaker + '**：'
+      : msg.speaker + '：';
+
+    out.push(speakerPrefix + msg.lines[0]);
+    for (let j = 1; j < msg.lines.length; j++) {
+      out.push((mdMode ? '> ' : '') + msg.lines[j]);
+    }
+    if (usedQuote && i < merged.length - 1) {
+      out.push('');
+    }
+  }
+
+  document.getElementById('output').value = out.join('\n');
+  setStatus('完成，共 ' + merged.length + ' 条');
+}
+
+function joinByMode(prev, cur) {
+  switch (mergeMode) {
+    case 'slash':  return prev + ' / ' + cur;
+    case 'space':  return prev + ' ' + cur;
+    case 'period': {
+      const endsPunct = /[。！？……!?.~～、，,]$/.test(prev);
+      return (endsPunct ? prev : prev + '。') + cur;
+    }
+    default:       return prev + ' / ' + cur;
+  }
+}
+
+// ============ 复制 ============
+function copyOutput() {
+  const text = document.getElementById('output').value;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '已复制 ✓';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = '复制结果';
+      btn.classList.remove('copied');
+    }, 1800);
+  });
+}
+
+function setStatus(msg) { document.getElementById('statusMsg').textContent = msg; }
+
+renderMappings();
+</script>
+</body>
+</html>
