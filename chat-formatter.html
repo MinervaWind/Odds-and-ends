@@ -328,7 +328,7 @@ function removeMapping(i) {
 // 电脑端：名字 HH:MM:SS
 // 手机端：名字: MM-DD HH:MM:SS
 const SPEAKER_RE_PC     = /^(.+?)\s+\d{1,2}:\d{2}:\d{2}\s*$/;
-const SPEAKER_RE_MOBILE = /^(.+?):\s+\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2}\s*$/;
+const SPEAKER_RE_MOBILE = /^(.+?)[:\uff1a]\s+\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2}\s*$/;
 
 function matchSpeaker(line) {
   let m = line.match(SPEAKER_RE_PC);
