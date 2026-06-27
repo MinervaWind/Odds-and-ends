@@ -284,6 +284,7 @@
 <div class="actions">
   <button class="btn-run" onclick="run()">整理</button>
   <button class="btn-copy" id="copyBtn" onclick="copyOutput()">复制结果</button>
+  <button class="btn-copy" onclick="clearAll()" style="color:var(--text-dim);">清空</button>
   <span class="status" id="statusMsg"></span>
 </div>
 
@@ -376,6 +377,8 @@ function buildNameMap() {
 }
 
 const UNSUPPORTED_RE = /\[不支持的元素类型\]/g;
+// 孤立时间戳行：只有 HH:MM:SS，没有名字前缀
+const ORPHAN_TIME_RE = /^\d{1,2}:\d{2}:\d{2}\s*$/;
 
 function run() {
   const raw = document.getElementById('input').value.replace(/\r/g, '');
@@ -387,26 +390,27 @@ function run() {
   // ---- Step 1: 解析为结构化消息 ----
   // 规则：遇到「名字 时间戳」行开启一条新消息，
   // 之后所有行都属于这条消息的内容，直到下一个「名字 时间戳」行。
-  // 这样能完整捕获单条消息内部的多行（如转述对话）。
+  // 孤立时间戳行（只有时间没有名字，QQ复制bug）→ 开启一条【?】消息。
   const messages = [];
   let current = null;
+  let hasOrphan = false;
 
   for (const rawLine of lines) {
-    const line = rawLine.replace(/\s+$/, ''); // 去尾部空白，保留行首
+    const line = rawLine.replace(/\s+$/, '');
     const m = line.trim().match(SPEAKER_RE);
+    const isOrphanTime = !m && ORPHAN_TIME_RE.test(line.trim());
+
     if (m) {
-      // 新消息开始
       if (current) messages.push(current);
       const rawSpeaker = m[1].trim();
-      current = {
-        speaker: nameMap[rawSpeaker] || rawSpeaker,
-        lines: []  // 内容行数组
-      };
+      current = { speaker: nameMap[rawSpeaker] || rawSpeaker, lines: [], orphan: false };
+    } else if (isOrphanTime) {
+      if (current) messages.push(current);
+      current = { speaker: '【?】', lines: [], orphan: true };
+      hasOrphan = true;
     } else if (current) {
-      // 属于当前消息的内容行
       if (line.trim() !== '') current.lines.push(line.trim());
     }
-    // current 为空且非发言人行 → 忽略（开头杂行）
   }
   if (current) messages.push(current);
 
@@ -472,7 +476,11 @@ function run() {
   }
 
   document.getElementById('output').value = out.join('\n');
-  setStatus('完成，共 ' + merged.length + ' 条');
+  if (hasOrphan) {
+    setStatus('完成，共 ' + merged.length + ' 条 · ⚠️ 有发言人缺失，已标记为【?】');
+  } else {
+    setStatus('完成，共 ' + merged.length + ' 条');
+  }
 }
 
 function joinByMode(prev, cur) {
@@ -500,6 +508,16 @@ function copyOutput() {
       btn.classList.remove('copied');
     }, 1800);
   });
+}
+
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('output').value = '';
+  mappings = [];
+  detectedNames = new Set();
+  renderMappings();
+  setStatus('');
+  document.getElementById('detectStatus').textContent = '';
 }
 
 function setStatus(msg) { document.getElementById('statusMsg').textContent = msg; }
