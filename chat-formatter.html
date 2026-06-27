@@ -325,16 +325,26 @@ function removeMapping(i) {
 }
 
 // ============ 自动检测名称 ============
-// QQ 发言人行：名字 [可选(QQ号/备注)] 空格 HH:MM:SS
-const SPEAKER_RE = /^(.+?)\s+\d{1,2}:\d{2}:\d{2}\s*$/;
+// 电脑端：名字 HH:MM:SS
+// 手机端：名字: MM-DD HH:MM:SS
+const SPEAKER_RE_PC     = /^(.+?)\s+\d{1,2}:\d{2}:\d{2}\s*$/;
+const SPEAKER_RE_MOBILE = /^(.+?):\s+\d{2}-\d{2}\s+\d{1,2}:\d{2}:\d{2}\s*$/;
+
+function matchSpeaker(line) {
+  let m = line.match(SPEAKER_RE_PC);
+  if (m) return m[1].trim();
+  m = line.match(SPEAKER_RE_MOBILE);
+  if (m) return m[1].trim();
+  return null;
+}
 
 function autoDetect() {
   const text = document.getElementById('input').value;
   const lines = text.split('\n');
   const found = new Set();
   for (const line of lines) {
-    const m = line.match(SPEAKER_RE);
-    if (m) found.add(m[1].trim());
+    const name = matchSpeaker(line.trim());
+    if (name) found.add(name);
   }
   let added = 0;
   for (const name of found) {
@@ -397,12 +407,11 @@ function run() {
 
   for (const rawLine of lines) {
     const line = rawLine.replace(/\s+$/, '');
-    const m = line.trim().match(SPEAKER_RE);
-    const isOrphanTime = !m && ORPHAN_TIME_RE.test(line.trim());
+    const rawSpeaker = matchSpeaker(line.trim());
+    const isOrphanTime = !rawSpeaker && ORPHAN_TIME_RE.test(line.trim());
 
-    if (m) {
+    if (rawSpeaker) {
       if (current) messages.push(current);
-      const rawSpeaker = m[1].trim();
       current = { speaker: nameMap[rawSpeaker] || rawSpeaker, lines: [], orphan: false };
     } else if (isOrphanTime) {
       if (current) messages.push(current);
