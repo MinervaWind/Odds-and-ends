@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>塔罗抽牌</title>
+<style>
+  @font-face {
+    font-family: 'system-serif';
+    src: local('Songti SC'), local('SimSun'), local('Noto Serif SC');
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #14161f;
+    color: #ece6d6;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  body {
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px 80px;
+  }
+  .wrap { width: 100%; max-width: 520px; }
+
+  h1 {
+    font-family: system-serif, "Songti SC", serif;
+    font-size: 26px;
+    font-weight: 400;
+    letter-spacing: 2px;
+    text-align: center;
+    color: #d9c9a3;
+    margin-bottom: 4px;
+  }
+  .sub {
+    text-align: center;
+    font-size: 12px;
+    color: #6b7080;
+    margin-bottom: 28px;
+    letter-spacing: 1px;
+  }
+
+  .panel {
+    background: #1c1f2b;
+    border: 1px solid #2c3040;
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    color: #8a8f9e;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  select, textarea {
+    width: 100%;
+    background: #14161f;
+    border: 1px solid #34394a;
+    border-radius: 8px;
+    color: #ece6d6;
+    font-size: 14px;
+    padding: 10px 12px;
+    font-family: inherit;
+  }
+  select:focus, textarea:focus {
+    outline: none;
+    border-color: #a3854f;
+  }
+  textarea { resize: vertical; line-height: 1.6; }
+
+  .row { display: flex; gap: 10px; margin-top: 16px; }
+  button {
+    flex: 1;
+    background: transparent;
+    border: 1px solid #a3854f;
+    color: #d9c9a3;
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 1px;
+    transition: background 0.15s ease;
+  }
+  button:hover { background: rgba(163,133,79,0.12); }
+  button:active { transform: scale(0.98); }
+  button.primary { background: #a3854f; color: #14161f; border-color: #a3854f; }
+  button.primary:hover { background: #b89860; }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .status {
+    text-align: center;
+    font-size: 12px;
+    color: #6b7080;
+    margin: 14px 0 4px;
+    letter-spacing: 1px;
+  }
+
+  .cards { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+
+  .card-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #1c1f2b;
+    border: 1px solid #2c3040;
+    border-radius: 12px;
+    padding: 12px 14px;
+    animation: fadeIn 0.4s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .icon-box {
+    width: 52px;
+    min-width: 52px;
+    height: 68px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid;
+    font-size: 22px;
+  }
+  .icon-box.reversed { transform: rotate(180deg); }
+
+  .suit-major { background: rgba(163,133,79,0.12); border-color: #a3854f; color: #d9c9a3; }
+  .suit-wand { background: rgba(196,106,74,0.12); border-color: #c46a4a; color: #d99479; }
+  .suit-cup { background: rgba(90,130,168,0.12); border-color: #5a82a8; color: #8fb0d1; }
+  .suit-sword { background: rgba(140,140,150,0.12); border-color: #8c8c96; color: #b5b5bd; }
+  .suit-coin { background: rgba(180,150,70,0.12); border-color: #b49646; color: #d4bb70; }
+
+  .text-wrap { flex: 1; }
+  .position { font-size: 12px; color: #8a8f9e; margin-bottom: 3px; letter-spacing: 0.5px; }
+  .cardname { font-family: system-serif, "Songti SC", serif; font-size: 16px; color: #ece6d6; }
+  .orientation { font-size: 12px; color: #a3854f; margin-left: 6px; }
+
+  .footer-hint {
+    text-align: center;
+    font-size: 11px;
+    color: #4a4f5f;
+    margin-top: 24px;
+    line-height: 1.8;
+  }
+
+  ::selection { background: #a3854f; color: #14161f; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>塔 罗 抽 牌</h1>
+  <div class="sub">TAROT · 真随机洗牌 · 78 张全牌</div>
+
+  <div class="panel">
+    <label for="spreadSelect">选择牌阵</label>
+    <select id="spreadSelect">
+      <option value="single">单张牌 · 当下指引</option>
+      <option value="three">三张牌 · 过去 / 现在 / 未来</option>
+      <option value="five" selected>五张牌 · 自定义维度</option>
+      <option value="relationship">关系牌阵 · 7 张</option>
+      <option value="celtic">凯尔特十字 · 10 张</option>
+      <option value="custom">完全自定义</option>
+    </select>
+
+    <div id="customArea" style="display:none; margin-top:14px;">
+      <label for="customPositions">自定义位置（每行一个，2–10 个）</label>
+      <textarea id="customPositions" rows="4" placeholder="我的状态&#10;对方的状态&#10;关系走向"></textarea>
+    </div>
+
+    <div class="row">
+      <button id="shuffleBtn">重新洗牌</button>
+      <button id="drawBtn" class="primary">按牌阵抽牌</button>
+    </div>
+  </div>
+
+  <div class="status" id="deckStatus">牌堆：78 张</div>
+
+  <div class="cards" id="cardArea"></div>
+
+  <div class="footer-hint">
+    使用 crypto.getRandomValues 生成的加密级随机数<br>
+    离线运行，不上传任何数据
+  </div>
+</div>
+
+<script>
+const majorArcana = ['愚人','魔术师','女祭司','皇后','皇帝','教皇','恋人','战车','力量','隐士','命运之轮','正义','倒吊人','死神','节制','恶魔','塔','星星','月亮','太阳','审判','世界'];
+const suits = [
+  { name: '权杖', symbol: '🜂', cls: 'suit-wand' },
+  { name: '圣杯', symbol: '🜄', cls: 'suit-cup' },
+  { name: '宝剑', symbol: '🜁', cls: 'suit-sword' },
+  { name: '星币', symbol: '🜃', cls: 'suit-coin' }
+];
+const nums = ['Ace','2','3','4','5','6','7','8','9','10','侍从','骑士','王后','国王'];
+
+const spreadPresets = {
+  single: ['当下指引'],
+  three: ['过去','现在','未来'],
+  five: ['维度一','维度二','维度三','维度四','维度五'],
+  relationship: ['你的感受','你在关系中的角色','对方的感受','对方在关系中的角色','关系的挑战','关系的潜力','建议'],
+  celtic: ['现状','阻碍','潜意识','显意识','过去','未来','你的态度','外部影响','希望或恐惧','最终结果']
+};
+
+function buildDeck(){
+  const deck = [];
+  majorArcana.forEach(c => deck.push({ name: c, symbol: '✦', cls: 'suit-major' }));
+  suits.forEach(s => nums.forEach(n => deck.push({ name: s.name + ' ' + n, symbol: s.symbol, cls: s.cls })));
+  return deck;
+}
+
+function secureShuffle(arr){
+  const a = arr.slice();
+  for(let i = a.length - 1; i > 0; i--){
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    const j = buf[0] % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+let deck = secureShuffle(buildDeck());
+
+const cardArea = document.getElementById('cardArea');
+const deckStatus = document.getElementById('deckStatus');
+const spreadSelect = document.getElementById('spreadSelect');
+const customArea = document.getElementById('customArea');
+const customPositions = document.getElementById('customPositions');
+const shuffleBtn = document.getElementById('shuffleBtn');
+const drawBtn = document.getElementById('drawBtn');
+
+spreadSelect.addEventListener('change', () => {
+  customArea.style.display = spreadSelect.value === 'custom' ? 'block' : 'none';
+});
+
+function updateStatus(){
+  deckStatus.textContent = '牌堆：' + deck.length + ' 张';
+}
+
+function getPositions(){
+  if(spreadSelect.value === 'custom'){
+    const lines = customPositions.value.split('\n').map(s => s.trim()).filter(Boolean);
+    if(lines.length < 2) return null;
+    return lines.slice(0, 10);
+  }
+  return spreadPresets[spreadSelect.value];
+}
+
+function makeCardRow(position, card, orientation){
+  const row = document.createElement('div');
+  row.className = 'card-row';
+
+  const iconBox = document.createElement('div');
+  iconBox.className = 'icon-box ' + card.cls + (orientation === '逆位' ? ' reversed' : '');
+  iconBox.textContent = card.symbol;
+
+  const textWrap = document.createElement('div');
+  textWrap.className = 'text-wrap';
+
+  const posEl = document.createElement('div');
+  posEl.className = 'position';
+  posEl.textContent = position;
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'cardname';
+  nameEl.textContent = card.name;
+  const oriEl = document.createElement('span');
+  oriEl.className = 'orientation';
+  oriEl.textContent = orientation;
+  nameEl.appendChild(oriEl);
+
+  textWrap.appendChild(posEl);
+  textWrap.appendChild(nameEl);
+  row.appendChild(iconBox);
+  row.appendChild(textWrap);
+  return row;
+}
+
+shuffleBtn.addEventListener('click', () => {
+  deck = secureShuffle(buildDeck());
+  cardArea.innerHTML = '';
+  updateStatus();
+});
+
+drawBtn.addEventListener('click', () => {
+  const positions = getPositions();
+  if(!positions){
+    customPositions.style.borderColor = '#c46a4a';
+    return;
+  }
+  customPositions.style.borderColor = '#34394a';
+
+  if(deck.length < positions.length){
+    deck = secureShuffle(buildDeck());
+  }
+
+  cardArea.innerHTML = '';
+  positions.forEach(pos => {
+    const card = deck.shift();
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    const orientation = (buf[0] % 2 === 0) ? '正位' : '逆位';
+    cardArea.appendChild(makeCardRow(pos, card, orientation));
+  });
+  updateStatus();
+});
+
+updateStatus();
+</script>
+</body>
+</html>
