@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>安科骰点台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* 布局：左侧操作台 + 右侧只增不改的骰点日志；窄屏堆叠为单列 */
+:root{
+  --bg:#ece9e3; --surface:#faf8f5; --surface-2:#f1eee8; --line:#d8d3c9;
+  --ink:#211f1c; --muted:#6d675e; --accent:#1c5a66;
+  --crit:#9a6c14; --ok:#2f6b45; --fail:#6d675e; --fumble:#a13b2e;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a; --surface:#1c1e23; --surface-2:#23262c; --line:#32363e;
+    --ink:#e8e5de; --muted:#938d84; --accent:#74b5c0;
+    --crit:#d9a441; --ok:#68b57f; --fail:#938d84; --fumble:#e0705c;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a; --surface:#1c1e23; --surface-2:#23262c; --line:#32363e;
+  --ink:#e8e5de; --muted:#938d84; --accent:#74b5c0;
+  --crit:#d9a441; --ok:#68b57f; --fail:#938d84; --fumble:#e0705c;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:20px 16px 40px; background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.6;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:1060px; margin:0 auto; display:flex; flex-direction:column; gap:16px}
+h1{font-family:var(--mono); font-size:19px; font-weight:600; letter-spacing:.01em; margin:0; text-wrap:balance}
+.sub{color:var(--muted); font-size:13px; margin:2px 0 0}
+header .row{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:10px}
+.pad{padding:14px 16px}
+
+/* 随机源 */
+.source{display:flex; flex-wrap:wrap; gap:12px 16px; align-items:flex-end}
+.field{display:flex; flex-direction:column; gap:5px; min-width:0}
+label,.lbl{font-size:12px; color:var(--muted); font-family:var(--mono); letter-spacing:.03em; text-transform:uppercase}
+input[type=text],input[type=number],textarea,select{
+  font-family:var(--mono); font-size:14px; color:var(--ink); background:var(--surface-2);
+  border:1px solid var(--line); border-radius:7px; padding:8px 10px; width:100%;
+  font-variant-numeric:tabular-nums;
+}
+textarea{font-size:13px; line-height:1.55; resize:vertical; min-height:108px}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:var(--surface-2)}
+.seg button{
+  font-family:var(--mono); font-size:13px; padding:8px 12px; border:0; background:transparent;
+  color:var(--muted); cursor:pointer;
+}
+.seg button[aria-pressed=true]{background:var(--accent); color:var(--surface); font-weight:500}
+.note{font-size:12.5px; color:var(--muted); line-height:1.55; margin:10px 0 0; border-top:1px dashed var(--line); padding-top:10px}
+.note b{color:var(--ink); font-weight:500}
+
+.grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,400px); gap:16px; align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.tabs{display:flex; gap:2px; border-bottom:1px solid var(--line); padding:0 8px}
+.tabs button{
+  font-family:var(--sans); font-size:14px; padding:11px 13px; border:0; background:transparent;
+  color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;
+}
+.tabs button[aria-selected=true]{color:var(--ink); border-bottom-color:var(--accent); font-weight:500}
+.panel{display:none; padding:16px}
+.panel.on{display:flex; flex-direction:column; gap:13px}
+.inline{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end}
+.inline .field{flex:1 1 150px}
+button.go{
+  font-family:var(--mono); font-size:14px; font-weight:500; padding:9px 18px; cursor:pointer;
+  background:var(--accent); color:var(--surface); border:1px solid var(--accent); border-radius:7px;
+}
+button.go:hover{filter:brightness(1.08)}
+button.ghost{
+  font-family:var(--mono); font-size:12.5px; padding:6px 10px; cursor:pointer;
+  background:var(--surface-2); color:var(--ink); border:1px solid var(--line); border-radius:6px;
+}
+button.ghost:hover{border-color:var(--accent); color:var(--accent)}
+.quick{display:flex; gap:6px; flex-wrap:wrap}
+.hint{font-size:12.5px; color:var(--muted); font-family:var(--mono)}
+.explain{
+  margin:0; font-size:13px; line-height:1.55; color:var(--ink);
+  border-left:2px solid var(--accent); padding:2px 0 2px 10px;
+}
+.explain.bad{border-left-color:var(--line); color:var(--muted)}
+.syntax{margin:0; display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 14px; align-items:baseline}
+.syntax dt{font-family:var(--mono); font-size:12.5px; color:var(--accent); white-space:nowrap}
+.syntax dd{margin:0; font-size:12.5px; color:var(--muted); line-height:1.5}
+
+/* 分级表编辑器 */
+.tiers{display:flex; flex-direction:column; gap:5px}
+.tier-row{display:grid; grid-template-columns:minmax(70px,1.3fr) 70px minmax(70px,1fr) 96px 32px; gap:6px; align-items:center}
+.tier-row input,.tier-row select{padding:6px 8px; font-size:13px}
+.tier-row .t-del{padding:6px 0; width:32px; text-align:center}
+@media (max-width:620px){
+  .tier-row{grid-template-columns:minmax(0,1fr) 70px minmax(0,1fr); grid-template-areas:"n o v" "k k d"}
+  .tier-row .t-name{grid-area:n} .tier-row .t-op{grid-area:o} .tier-row .t-val{grid-area:v}
+  .tier-row .t-k{grid-area:k} .tier-row .t-del{grid-area:d; width:100%}
+}
+.head-row{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap}
+
+/* 角色 */
+.skills{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px}
+.skills li{display:grid; grid-template-columns:minmax(0,1fr) 84px auto 32px; gap:6px; align-items:center}
+.skills input{padding:6px 8px; font-size:13px}
+.skills .s-go{font-family:var(--mono); font-size:12.5px; padding:6px 11px; cursor:pointer; background:var(--surface-2); color:var(--accent); border:1px solid var(--accent); border-radius:6px}
+.skills .s-go:hover{background:var(--accent); color:var(--surface)}
+.skills .s-del{padding:6px 0; width:32px; text-align:center}
+.empty-note{font-size:13px; color:var(--muted); padding:6px 0}
+.io{margin:0; width:100%; min-height:70px; font-size:12px}
+/* 随机表 */
+.tb-head,.tb-row{display:grid; grid-template-columns:26px 62px minmax(0,1fr) 46px 32px; gap:6px; align-items:start}
+.tb-head{padding-bottom:2px}
+.tb-head span{font-size:11.5px; color:var(--muted); font-family:var(--mono); letter-spacing:.03em}
+.tb-rows{display:flex; flex-direction:column; gap:5px}
+.tb-row .tb-no{font-family:var(--mono); font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; padding-top:8px; text-align:right}
+.tb-row input,.tb-row textarea{padding:6px 8px; font-size:13px}
+.tb-row textarea{font-family:var(--sans); min-height:33px; line-height:1.5; overflow:hidden; resize:none}
+.tb-row .tb-p{font-family:var(--mono); font-size:12px; color:var(--accent); font-variant-numeric:tabular-nums; padding-top:8px; text-align:right}
+.tb-row .tb-del{padding:6px 0; width:32px; text-align:center}
+@media (max-width:620px){
+  .tb-head{display:none}
+  .tb-row{grid-template-columns:26px 62px 1fr 32px; grid-template-areas:"n w p d" "t t t t"}
+  .tb-row .tb-no{grid-area:n} .tb-row .tb-w{grid-area:w} .tb-row .tb-p{grid-area:p}
+  .tb-row .tb-del{grid-area:d; width:100%} .tb-row .tb-t{grid-area:t}
+}
+.memo-row{display:flex; align-items:center; gap:10px; padding:11px 16px; border-top:1px solid var(--line)}
+.memo-row label{white-space:nowrap}
+.memo-row input{flex:1 1 auto; font-family:var(--sans); padding:7px 10px}
+.log-list .memo{display:block; font-family:var(--sans); font-size:12px; color:var(--accent); margin-top:2px}
+.check{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--ink); font-family:var(--sans)}
+.check input{width:auto; accent-color:var(--accent)}
+
+/* 结果 */
+.out{border-top:1px solid var(--line); padding:14px 16px 16px; display:flex; flex-direction:column; gap:6px; min-height:92px; justify-content:center}
+.out .big{font-family:var(--mono); font-size:34px; font-weight:600; line-height:1.1; font-variant-numeric:tabular-nums; word-break:break-word}
+.out .grade{font-family:var(--mono); font-size:15px; font-weight:500}
+.out .detail{font-family:var(--mono); font-size:12.5px; color:var(--muted); word-break:break-all}
+.out.empty .big{color:var(--muted); font-size:16px; font-weight:400}
+.crit{color:var(--crit)} .ok{color:var(--ok)} .fail{color:var(--fail)} .fumble{color:var(--fumble)}
+.err{color:var(--fumble); font-family:var(--mono); font-size:13px}
+
+/* 日志 */
+.log-head{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); flex-wrap:wrap}
+.log-head h2{font-family:var(--mono); font-size:13px; font-weight:600; margin:0; letter-spacing:.03em; text-transform:uppercase; color:var(--muted)}
+.log-list{list-style:none; margin:0; padding:6px; max-height:62vh; overflow-y:auto; display:flex; flex-direction:column; gap:4px}
+.log-list li{
+  display:grid; grid-template-columns:34px minmax(0,1fr); gap:9px; padding:8px 9px;
+  border-radius:7px; background:var(--surface-2); font-size:13px;
+}
+.log-list li.sample{background:transparent; border:1px dashed var(--line); opacity:.72}
+.log-list .no{font-family:var(--mono); font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; padding-top:2px}
+.log-list .body{min-width:0}
+.log-list .line1{font-family:var(--mono); font-size:13.5px; display:flex; gap:7px; flex-wrap:wrap; align-items:baseline}
+.log-list .q{color:var(--muted)}
+.log-list .v{font-weight:600; font-variant-numeric:tabular-nums}
+.log-list .meta{display:block; font-family:var(--mono); font-size:11.5px; color:var(--muted); margin-top:2px; word-break:break-all}
+.log-foot{padding:10px 14px; border-top:1px solid var(--line); display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.ok-flash{color:var(--ok); font-size:12.5px; font-family:var(--mono)}
+.foot{display:flex; flex-direction:column; gap:10px; align-items:flex-start}
+.foot > button{color:var(--muted); border-color:transparent; background:transparent}
+.foot > button:hover{color:var(--accent); border-color:var(--line)}
+.foot .card{width:100%}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="row">
+    <div>
+      <h1>安科骰点台</h1>
+      <p class="sub">基于HTML语言的简易骰点工具，可离线运行，数据完全保存在本地，请注意自行留档。</p>
+    </div>
+    <button class="ghost" id="theme" type="button">切换主题</button>
+  </div>
+</header>
+
+<section class="card pad">
+  <div class="source">
+    <div class="field" style="flex:0 0 auto">
+      <span class="lbl">随机源</span>
+      <div class="seg" role="group" aria-label="随机源">
+        <button type="button" id="src-true" aria-pressed="true">真随机</button>
+        <button type="button" id="src-seed" aria-pressed="false">种子</button>
+      </div>
+    </div>
+    <div class="field" style="flex:1 1 220px">
+      <label for="seed">种子（公开信息，例如楼层号）</label>
+      <input type="text" id="seed" value="327楼" autocomplete="off" disabled>
+    </div>
+    <div class="field" style="flex:0 0 110px">
+      <label for="idx">序号</label>
+      <input type="number" id="idx" value="1" min="0" step="1" disabled>
+    </div>
+    <button class="ghost" type="button" id="idx-reset">复位</button>
+  </div>
+  <p class="note" id="srcnote">
+    <b>真随机</b>：用浏览器的加密随机数，不可复现，适合自己跑团或试手。
+  </p>
+</section>
+
+<div class="grid">
+
+  <div class="card">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-free" aria-selected="true" aria-controls="p-free">自由骰</button>
+      <button type="button" role="tab" id="tab-check" aria-selected="false" aria-controls="p-check">判定</button>
+      <button type="button" role="tab" id="tab-char" aria-selected="false" aria-controls="p-char">角色</button>
+      <button type="button" role="tab" id="tab-table" aria-selected="false" aria-controls="p-table">随机表</button>
+    </div>
+
+    <div class="panel on" id="p-free" role="tabpanel" aria-labelledby="tab-free">
+      <div class="inline">
+        <div class="field" style="flex:1 1 220px">
+          <label for="expr">表达式</label>
+          <input type="text" id="expr" value="d100" autocomplete="off" spellcheck="false">
+        </div>
+        <button class="go" type="button" id="roll-free">投掷</button>
+      </div>
+      <div class="quick">
+        <span class="hint" style="align-self:center">填入：</span>
+        <button class="ghost" type="button" data-expr="d100">d100</button>
+        <button class="ghost" type="button" data-expr="d20">d20</button>
+        <button class="ghost" type="button" data-expr="d6">d6</button>
+        <button class="ghost" type="button" data-expr="2d6">2d6</button>
+        <button class="ghost" type="button" data-expr="3d6+2">3d6+2</button>
+        <button class="ghost" type="button" data-expr="4d6kh3">4d6kh3</button>
+        <button class="ghost" type="button" data-expr="5#d100">5#d100</button>
+      </div>
+      <div class="quick">
+        <span class="hint" style="align-self:center">常用补正：</span>
+        <span class="quick" id="adj-row"></span>
+        <button class="ghost" type="button" id="adj-edit">管理</button>
+      </div>
+      <div id="adj-editor" hidden>
+        <div class="inline">
+          <div class="field" style="flex:1 1 140px">
+            <label for="adj-name">补正名称</label>
+            <input type="text" id="adj-name" placeholder="朋友保底" autocomplete="off">
+          </div>
+          <div class="field" style="flex:0 0 110px">
+            <label for="adj-val">数值</label>
+            <input type="number" id="adj-val" value="50" step="1">
+          </div>
+          <button class="ghost" type="button" id="adj-add">添加</button>
+        </div>
+        <p class="hint" style="margin-top:6px">点标签把补正接到表达式末尾，名称同时写进备注。管理模式下点标签即删除。</p>
+      </div>
+      <p class="explain" id="explain">掷 1 个 100 面骰。结果范围 1–100。</p>
+      <dl class="syntax">
+        <dt>d6</dt><dd>一个 6 面骰，出 1–6</dd>
+        <dt>3d6</dt><dd>掷 3 个 6 面骰，把点数加起来，出 3–18</dd>
+        <dt>3d6+2</dt><dd>加完之后再固定 +2（修正值、加值都写在这里）</dd>
+        <dt>4d6kh3</dt><dd>掷 4 个 6 面骰，只算其中最大的 3 个（kl 则取最小的）</dd>
+        <dt>5#d100</dt><dd>同一条表达式独立投 5 次，分别出结果，不求和</dd>
+      </dl>
+      <p class="hint">上限 500 个骰、100 次重复。</p>
+    </div>
+
+    <div class="panel" id="p-check" role="tabpanel" aria-labelledby="tab-check">
+      <div class="inline">
+        <div class="field" style="flex:1 1 170px">
+          <label for="scheme">判定方案</label>
+          <select id="scheme">
+            <option value="coc">COC7 分级（内置）</option>
+            <option value="th">单阈值（内置）</option>
+            <option value="custom">自定义分级表</option>
+          </select>
+        </div>
+        <div class="field" style="flex:0 0 110px">
+          <label for="die">判定骰</label>
+          <input type="text" id="die" value="d100" spellcheck="false" disabled>
+        </div>
+        <div class="field" style="flex:0 0 110px">
+          <label for="skill" id="skill-label">技能值</label>
+          <input type="number" id="skill" value="60" min="0" max="9999" step="1">
+        </div>
+        <button class="go" type="button" id="roll-check">检定</button>
+      </div>
+      <p class="explain" id="check-explain"></p>
+      <div id="tier-editor" hidden>
+        <div class="head-row" style="margin-bottom:8px">
+          <span class="lbl">分级表 · 从上往下匹配，第一条命中即生效</span>
+          <div class="quick">
+            <button class="ghost" type="button" data-preset="cocish">COC7 式</button>
+            <button class="ghost" type="button" data-preset="band">固定区间式</button>
+            <button class="ghost" type="button" data-preset="jp2d6">2d6 日系式</button>
+            <button class="ghost" type="button" data-preset="dc">DC 式</button>
+          </div>
+        </div>
+        <div class="tiers" id="tiers"></div>
+        <div class="quick" style="margin-top:8px">
+          <button class="ghost" type="button" id="tier-add">＋ 加一级</button>
+        </div>
+        <dl class="syntax" style="margin-top:10px">
+          <dt>值</dt><dd>代表上面填的技能值，可写 值/2、值*0.8、(值+20)/2、floor(值/3)</dd>
+          <dt>≤ / ≥</dt><dd>骰出的点数小于等于／大于等于阈值时命中。d100 系用 ≤，2d6 和 d20 系用 ≥</dd>
+          <dt>其他</dt><dd>兜底，放在最后一行，前面都没命中就落到它</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="panel" id="p-char" role="tabpanel" aria-labelledby="tab-char">
+      <div class="inline">
+        <div class="field" style="flex:0 0 auto; min-width:120px">
+          <label for="who">角色</label>
+          <select id="who"></select>
+        </div>
+        <div class="field" style="flex:1 1 140px">
+          <label for="who-name">名字</label>
+          <input type="text" id="who-name" autocomplete="off">
+        </div>
+        <button class="ghost" type="button" id="char-new">新建角色</button>
+        <button class="ghost" type="button" id="char-del">删除角色</button>
+      </div>
+      <ul class="skills" id="skills"></ul>
+      <div class="inline">
+        <div class="field" style="flex:1 1 140px">
+          <label for="sk-name">新增技能</label>
+          <input type="text" id="sk-name" placeholder="侦查" autocomplete="off">
+        </div>
+        <div class="field" style="flex:0 0 100px">
+          <label for="sk-val">数值</label>
+          <input type="number" id="sk-val" value="50" min="0" max="9999" step="1">
+        </div>
+        <button class="ghost" type="button" id="sk-add">添加</button>
+      </div>
+      <p class="hint">点技能行的「检定」直接套用当前判定方案投掷，结果连角色名一起写进日志。数值存在本机浏览器里，要留底或换设备用页面最下方的「数据备份」。</p>
+    </div>
+
+    <div class="panel" id="p-table" role="tabpanel" aria-labelledby="tab-table">
+      <div class="head-row">
+        <span class="lbl">选项表 · 权重越大越容易抽中</span>
+        <div class="quick">
+          <button class="ghost" type="button" id="tb-add">＋ 加一条</button>
+          <button class="ghost" type="button" id="tb-io-toggle">批量</button>
+        </div>
+      </div>
+      <div class="tb-head" aria-hidden="true">
+        <span>#</span><span>权重</span><span>内容</span><span>概率</span><span></span>
+      </div>
+      <div class="tb-rows" id="tb-rows"></div>
+      <div id="tb-io" hidden>
+        <textarea class="io" id="tb-text" spellcheck="false" placeholder="每行一条，可写「权重|内容」，例如&#10;3|一个常规走向&#10;1|特别离奇的走向"></textarea>
+        <div class="quick" style="margin-top:6px">
+          <button class="ghost" type="button" id="tb-import">从下框导入（替换现有表）</button>
+          <button class="ghost" type="button" id="tb-export">导出到下框</button>
+        </div>
+      </div>
+      <p class="explain" id="tb-explain"></p>
+      <div class="inline">
+        <div class="field" style="flex:0 0 110px">
+          <label for="draws">抽取数量</label>
+          <input type="number" id="draws" value="1" min="1" max="50" step="1">
+        </div>
+        <label class="check"><input type="checkbox" id="uniq" checked> 不重复</label>
+        <button class="go" type="button" id="roll-table">抽取</button>
+      </div>
+    </div>
+
+    <div class="memo-row">
+      <label for="memo">本次备注</label>
+      <input type="text" id="memo" placeholder="朋友保底50 ／ 雨天 ／ 第三幕开场" autocomplete="off">
+    </div>
+
+    <div class="out empty" id="out" aria-live="polite">
+      <div class="big">等待投掷</div>
+      <div class="detail">结果会同时写入右侧日志。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="log-head">
+      <h2>骰点日志</h2>
+      <span class="hint" id="count">示例</span>
+    </div>
+    <ul class="log-list" id="log"></ul>
+    <div class="log-foot">
+      <button class="ghost" type="button" id="copy">复制全部</button>
+      <button class="ghost" type="button" id="clear">清空</button>
+      <span class="ok-flash" id="flash"></span>
+    </div>
+  </div>
+
+</div>
+
+<section class="card pad">
+  <p class="note" style="border:0; padding:0; margin:0">
+    <b>怎么让读者相信你没有重 roll。</b>
+    切到种子模式，填一个事后无法改动的公开字符串当种子（指定的楼层号、楼层发表时间、当日公告里的某个数字都可以），每次投掷序号自动 +1。
+    结果完全由「种子 + 序号 + 表达式」决定：把这三项连同结果一起贴在帖子里，任何读者打开同一页面输入同样的三项，都会得到同一个数。
+    序号可以手动改，用来定位和复算某一次投掷。真随机模式不具备这种可验证性，它只适合自用。
+  </p>
+</section>
+
+<footer class="foot">
+  <button class="ghost" type="button" id="backup-toggle">数据备份</button>
+  <div class="card pad" id="backup" hidden>
+    <p class="note" style="border:0; padding:0; margin:0 0 10px">
+      这个页面是工具，不是存档柜。角色、随机表、常用补正、分级表都只存在这台浏览器里，清缓存就没了。
+      要留底或者换设备，导出一份贴进自己的文档保管。骰点日志不在里面，它用日志那边的「复制全部」。
+    </p>
+    <div class="quick">
+      <button class="ghost" type="button" id="bk-export">导出全部</button>
+      <button class="ghost" type="button" id="bk-copy">复制</button>
+      <button class="ghost" type="button" id="bk-import">从下框导入</button>
+      <button class="ghost" type="button" id="bk-clear">清空下框</button>
+      <span class="ok-flash" id="bk-flash"></span>
+    </div>
+    <textarea class="io" id="bk-io" spellcheck="false" style="margin-top:8px; min-height:110px" placeholder="点「导出全部」把数据倒进这里，或者把以前存的那份粘进来再点「从下框导入」。"></textarea>
+  </div>
+</footer>
+
+</div>
+
+<script>
+"use strict";
+(function(){
+const MAX_DICE=500, MAX_FACES=1000000, MAX_REPEAT=100, LOG_CAP=300, KEY="anke-dice-v1";
+
+/* ---------- 随机数 ---------- */
+function xmur3(str){
+  let h=1779033703^str.length;
+  for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; }
+  return function(){ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); h^=h>>>16; return h>>>0; };
+}
+function sfc32(a,b,c,d){
+  return function(){
+    a|=0;b|=0;c|=0;d|=0;
+    const t=(a+b|0)+d|0; d=d+1|0; a=b^b>>>9; b=c+(c<<3)|0; c=c<<21|c>>>11; c=c+t|0;
+    return (t>>>0)/4294967296;
+  };
+}
+function cryptoRng(){ const a=new Uint32Array(1); crypto.getRandomValues(a); return a[0]/4294967296; }
+function seededRng(seed,index){
+  const h=xmur3(String(seed)+"/"+String(index));
+  const r=sfc32(h(),h(),h(),h());
+  for(let i=0;i<8;i++) r();
+  return r;
+}
+
+/* ---------- 状态 ---------- */
+const PRESETS={
+  cocish:{die:"d100", tiers:[
+    {name:"大成功", op:"le", val:"1", k:"crit"},
+    {name:"极难成功", op:"le", val:"floor(值/5)", k:"ok"},
+    {name:"困难成功", op:"le", val:"floor(值/2)", k:"ok"},
+    {name:"成功", op:"le", val:"值", k:"ok"},
+    {name:"大失败", op:"ge", val:"96", k:"fumble"},
+    {name:"失败", op:"else", val:"", k:"fail"}
+  ]},
+  band:{die:"d100", tiers:[
+    {name:"大成功", op:"le", val:"5", k:"crit"},
+    {name:"成功", op:"le", val:"值", k:"ok"},
+    {name:"大失败", op:"ge", val:"96", k:"fumble"},
+    {name:"失败", op:"else", val:"", k:"fail"}
+  ]},
+  jp2d6:{die:"2d6", tiers:[
+    {name:"特殊成功", op:"ge", val:"12", k:"crit"},
+    {name:"失误", op:"le", val:"2", k:"fumble"},
+    {name:"成功", op:"ge", val:"值", k:"ok"},
+    {name:"失败", op:"else", val:"", k:"fail"}
+  ]},
+  dc:{die:"d20", tiers:[
+    {name:"大成功", op:"ge", val:"20", k:"crit"},
+    {name:"大失败", op:"le", val:"1", k:"fumble"},
+    {name:"通过", op:"ge", val:"值", k:"ok"},
+    {name:"未通过", op:"else", val:"", k:"fail"}
+  ]}
+};
+const OPSYM={le:"≤", ge:"≥", eq:"＝", else:"其他"};
+const state={
+  source:"true", seed:"327楼", index:1, scheme:"coc", log:[], no:0, samples:true,
+  tiers:PRESETS.cocish.tiers.map(t=>Object.assign({},t)),
+  chars:[{name:"示例角色", skills:[{name:"侦查",val:60},{name:"图书馆",val:70},{name:"聆听",val:45},{name:"幸运",val:55}]}],
+  who:0,
+  adjs:[{name:"朋友保底",delta:50},{name:"旧识",delta:20},{name:"初次见面",delta:-10}],
+  adjEdit:false,
+  table:[
+    {w:3, text:"什么也没发生，但你注意到走廊尽头的门开着"},
+    {w:3, text:"遇到巡夜的保安，他记得你的脸"},
+    {w:3, text:"电话响了，来电显示是自己的号码"},
+    {w:1, text:"有人在你背后喊你安科里用过的名字"}
+  ]
+};
+
+/* ---------- 表达式 ---------- */
+function parseExpr(input){
+  let s=String(input||"").trim().replace(/[×✕]/g,"x");
+  if(!s) throw new Error("请输入骰点表达式，例如 d100 或 3d6+2");
+  let repeat=1, m=s.match(/^(\d+)\s*#\s*(.+)$/);
+  if(m){ repeat=parseInt(m[1],10); s=m[2].trim(); }
+  else { m=s.match(/^(.+?)\s*x\s*(\d+)$/i); if(m){ s=m[1].trim(); repeat=parseInt(m[2],10); } }
+  if(!(repeat>=1&&repeat<=MAX_REPEAT)) throw new Error("重复次数需在 1–"+MAX_REPEAT+" 之间");
+  const compact=s.replace(/\s+/g,"");
+  const re=/([+-]?)(?:(\d*)d(\d+)(?:(k[hl])(\d+))?|(\d+))/gi;
+  const terms=[]; let idx=0, mt;
+  while((mt=re.exec(compact))!==null){
+    if(mt.index!==idx) throw new Error("无法识别：" + compact.slice(idx));
+    idx=re.lastIndex;
+    const sign = mt[1]==="-" ? -1 : 1;
+    if(mt[6]!==undefined){ terms.push({t:"c",sign,value:parseInt(mt[6],10)}); continue; }
+    const count = mt[2]==="" ? 1 : parseInt(mt[2],10);
+    const faces = parseInt(mt[3],10);
+    if(!(count>=1&&count<=MAX_DICE)) throw new Error("骰子个数需在 1–"+MAX_DICE+" 之间");
+    if(!(faces>=2&&faces<=MAX_FACES)) throw new Error("骰面数需在 2–"+MAX_FACES+" 之间");
+    let keep=null;
+    if(mt[4]){
+      const n=parseInt(mt[5],10);
+      if(!(n>=1&&n<=count)) throw new Error("kh/kl 的保留个数超出骰子个数");
+      keep={hi:mt[4].toLowerCase()==="kh", n:n};
+    }
+    terms.push({t:"d",sign,count,faces,keep});
+  }
+  if(idx!==compact.length) throw new Error("无法识别：" + compact.slice(idx));
+  if(!terms.length) throw new Error("无法识别的表达式");
+  return {terms, repeat, text:s};
+}
+function rollOnce(terms,rng){
+  let total=0; const parts=[];
+  for(const t of terms){
+    if(t.t==="c"){ total+=t.sign*t.value; parts.push((t.sign<0?"-":"+")+t.value); continue; }
+    const rolls=[];
+    for(let i=0;i<t.count;i++) rolls.push(1+Math.floor(rng()*t.faces));
+    let used=rolls;
+    if(t.keep){ const s=rolls.slice().sort((a,b)=>a-b); used = t.keep.hi ? s.slice(s.length-t.keep.n) : s.slice(0,t.keep.n); }
+    let sum=0; for(const v of used) sum+=v;
+    total+=t.sign*sum;
+    const label=t.count+"d"+t.faces+(t.keep?(t.keep.hi?"kh":"kl")+t.keep.n:"");
+    const shown = t.keep
+      ? "["+rolls.join(",")+" → 取 "+used.slice().sort((a,b)=>t.keep.hi?b-a:a-b).join(",")+"]"
+      : "["+rolls.join(",")+"]";
+    parts.push((t.sign<0?"-":"+")+label+shown);
+  }
+  let detail=parts.join(" ");
+  if(detail.charAt(0)==="+") detail=detail.slice(1);
+  return {total, detail};
+}
+
+/* ---------- 人话解释 ---------- */
+function rangeOf(terms){
+  let min=0,max=0;
+  for(const t of terms){
+    let lo,hi;
+    if(t.t==="c"){ lo=t.value; hi=t.value; }
+    else { const n=t.keep?t.keep.n:t.count; lo=n; hi=n*t.faces; }
+    if(t.sign<0){ min-=hi; max-=lo; } else { min+=lo; max+=hi; }
+  }
+  return {min,max};
+}
+function describeExpr(p){
+  const parts=[];
+  for(const t of p.terms){
+    if(t.t==="c"){
+      parts.push(parts.length===0 ? "固定 "+t.value : (t.sign<0?"再减 ":"再加 ")+t.value);
+      continue;
+    }
+    const base=t.count+" 个 "+t.faces+" 面骰";
+    let s;
+    if(t.keep) s="掷 "+base+"，只算其中最"+(t.keep.hi?"大":"小")+"的 "+t.keep.n+" 个";
+    else if(t.count===1) s="掷 "+base;
+    else s="掷 "+base+"并求和";
+    parts.push(t.sign<0 ? "减去（"+s+"）" : s);
+  }
+  const r=rangeOf(p.terms);
+  let text=parts.join("，")+"。结果范围 "+r.min+"–"+r.max;
+  if(p.repeat>1) text+="，整条独立重复 "+p.repeat+" 次，分别出结果";
+  return text+"。";
+}
+function updateExplain(){
+  const node=el.explain;
+  if(!node) return;
+  const raw=el.expr.value.trim();
+  if(!raw){ node.className="explain bad"; node.textContent="在上面写一条表达式，这里会说明它的含义。"; return; }
+  try{
+    node.className="explain";
+    node.textContent=describeExpr(parseExpr(raw));
+  }catch(err){
+    node.className="explain bad";
+    node.textContent=err.message;
+  }
+}
+
+/* ---------- 判定 ---------- */
+function gradeCoC(roll,skill){
+  if(roll===1) return {k:"crit",label:"大成功"};
+  if(skill<50 ? roll>=96 : roll===100) return {k:"fumble",label:"大失败"};
+  if(roll<=Math.floor(skill/5)) return {k:"ok",label:"极难成功"};
+  if(roll<=Math.floor(skill/2)) return {k:"ok",label:"困难成功"};
+  if(roll<=skill) return {k:"ok",label:"成功"};
+  return {k:"fail",label:"失败"};
+}
+
+/* 阈值算式：数字、值、+ - * / ( )、floor/ceil/round */
+function evalThreshold(src, base){
+  const s=String(src==null?"":src).replace(/值|技能|基准值|基准/g,"@").replace(/\s+/g,"");
+  if(!s) throw new Error("阈值为空");
+  let i=0;
+  function peek(){ return s[i]; }
+  function expr(){
+    let v=term();
+    while(peek()==="+"||peek()==="-"){ const op=s[i++]; const r=term(); v = op==="+" ? v+r : v-r; }
+    return v;
+  }
+  function term(){
+    let v=unary();
+    while(peek()==="*"||peek()==="/"){ const op=s[i++]; const r=unary(); if(op==="/"&&r===0) throw new Error("阈值算式里不能除以 0"); v = op==="*" ? v*r : v/r; }
+    return v;
+  }
+  function unary(){ if(peek()==="-"){ i++; return -unary(); } if(peek()==="+"){ i++; return unary(); } return primary(); }
+  function primary(){
+    if(peek()==="@"){ i++; return base; }
+    if(peek()==="("){ i++; const v=expr(); if(s[i]!==")") throw new Error("括号没有闭合"); i++; return v; }
+    const fn=s.slice(i).match(/^(floor|ceil|round|abs|min|max)\(/i);
+    if(fn){
+      const name=fn[1].toLowerCase(); i+=name.length+1;
+      const args=[expr()];
+      while(s[i]===","){ i++; args.push(expr()); }
+      if(s[i]!==")") throw new Error("括号没有闭合"); i++;
+      if(name==="min") return Math.min.apply(null,args);
+      if(name==="max") return Math.max.apply(null,args);
+      return Math[name](args[0]);
+    }
+    const num=s.slice(i).match(/^\d+(\.\d+)?/);
+    if(num){ i+=num[0].length; return parseFloat(num[0]); }
+    throw new Error("阈值算式看不懂：" + s.slice(i));
+  }
+  const out=expr();
+  if(i!==s.length) throw new Error("阈值算式看不懂：" + s.slice(i));
+  if(!Number.isFinite(out)) throw new Error("阈值算不出有效数字");
+  return out;
+}
+function fmtNum(n){ return Number.isInteger(n) ? String(n) : String(Math.round(n*100)/100); }
+function gradeCustom(total, base){
+  for(const t of state.tiers){
+    if(t.op==="else") return {k:t.k, label:t.name||"（未命名）"};
+    const v=evalThreshold(t.val, base);
+    if((t.op==="le"&&total<=v)||(t.op==="ge"&&total>=v)||(t.op==="eq"&&total===v))
+      return {k:t.k, label:t.name||"（未命名）"};
+  }
+  return {k:"", label:"未命中任何等级"};
+}
+function schemeDie(){ return state.scheme==="custom" ? (el.die.value.trim()||"d100") : "d100"; }
+function gradeFor(total, base){
+  if(state.scheme==="coc") return gradeCoC(total, base);
+  if(state.scheme==="th") return total<=base ? {k:"ok",label:"成功"} : {k:"fail",label:"失败"};
+  return gradeCustom(total, base);
+}
+
+/* ---------- 常用补正 ---------- */
+function signed(n){ return (n<0?"-":"+")+Math.abs(n); }
+function renderAdjs(){
+  if(!state.adjs.length){
+    el.adjRow.innerHTML='<span class="hint" style="align-self:center">（还没有，点「管理」添加）</span>';
+    return;
+  }
+  el.adjRow.innerHTML=state.adjs.map((a,i)=>
+    '<button class="ghost adj" type="button" data-i="'+i+'">'+esc(a.name)+" "+signed(a.delta)+(state.adjEdit?" ×":"")+"</button>"
+  ).join("");
+}
+function applyAdj(a){
+  let v=el.expr.value.trim();
+  if(!v) v="d100";
+  el.expr.value=v+signed(a.delta);
+  updateExplain();
+  const cur=el.memo.value.trim();
+  if(!cur) el.memo.value=a.name;
+  else if(cur.indexOf(a.name)<0) el.memo.value=cur+" / "+a.name;
+  save();
+}
+
+/* ---------- 分级表编辑器 ---------- */
+function renderTiers(){
+  el.tiers.innerHTML=state.tiers.map((t,i)=>
+    '<div class="tier-row" data-i="'+i+'">'+
+      '<input class="t-name" type="text" value="'+esc(t.name)+'" aria-label="等级名称" autocomplete="off">'+
+      '<select class="t-op" aria-label="比较方式">'+
+        ["le","ge","eq","else"].map(o=>'<option value="'+o+'"'+(t.op===o?" selected":"")+">"+OPSYM[o]+"</option>").join("")+
+      "</select>"+
+      '<input class="t-val" type="text" value="'+esc(t.val)+'" aria-label="阈值"'+(t.op==="else"?" disabled":"")+' autocomplete="off" spellcheck="false">'+
+      '<select class="t-k" aria-label="色标">'+
+        [["ok","成功色"],["crit","大成功色"],["fail","失败色"],["fumble","大失败色"],["","中性"]]
+          .map(o=>'<option value="'+o[0]+'"'+(t.k===o[0]?" selected":"")+">"+o[1]+"</option>").join("")+
+      "</select>"+
+      '<button class="ghost t-del" type="button" aria-label="删除这一级">×</button>'+
+    "</div>").join("");
+}
+function updateCheckExplain(){
+  const base=parseInt(el.skill.value,10);
+  const node=el.checkExplain;
+  node.className="explain";
+  if(!Number.isFinite(base)){ node.className="explain bad"; node.textContent="先填一个技能值。"; return; }
+  if(state.scheme==="coc"){
+    node.textContent="掷 d100。技能值 "+base+" → 大成功 1；极难 ≤"+Math.floor(base/5)+"；困难 ≤"+Math.floor(base/2)+"；成功 ≤"+base+"；大失败 "+(base<50?"≥96":"＝100")+"。";
+    return;
+  }
+  if(state.scheme==="th"){
+    node.textContent="掷 d100，≤"+base+" 即成功，不分级。成功率 "+base+"%。";
+    return;
+  }
+  const die=schemeDie();
+  let r;
+  try{ r=rangeOf(parseExpr(die).terms); }
+  catch(err){ node.className="explain bad"; node.textContent="判定骰「"+die+"」看不懂："+err.message; return; }
+  const bits=[], dead=[];
+  for(const t of state.tiers){
+    const nm=t.name||"（未命名）";
+    if(t.op==="else"){ bits.push(nm+" 其他"); continue; }
+    let v;
+    try{ v=evalThreshold(t.val, base); }
+    catch(err){ node.className="explain bad"; node.textContent="「"+nm+"」这一级的阈值有问题："+err.message; return; }
+    bits.push(nm+" "+OPSYM[t.op]+fmtNum(v));
+    if((t.op==="le"&&v<r.min)||(t.op==="ge"&&v>r.max)||(t.op==="eq"&&(v<r.min||v>r.max))) dead.push(nm);
+  }
+  node.textContent="掷 "+die+"（"+r.min+"–"+r.max+"），技能值 "+base+" → "+bits.join("；")+"。"
+    + (dead.length ? "　注意：「"+dead.join("」「")+"」超出了这个骰子的范围，永远不会命中。" : "");
+}
+function setScheme(s){
+  state.scheme = (s==="th"||s==="custom") ? s : "coc";
+  el.scheme.value=state.scheme;
+  const custom=state.scheme==="custom";
+  el.die.disabled=!custom;
+  if(!custom) el.die.value="d100";
+  el.tierEditor.hidden=!custom;
+  el.skillLabel.textContent = state.scheme==="th" ? "成功线" : "技能值";
+  if(custom) renderTiers();
+  updateCheckExplain(); save();
+}
+
+/* ---------- 角色 ---------- */
+function curChar(){ return state.chars[state.who] || null; }
+function renderChars(){
+  el.who.innerHTML=state.chars.map((c,i)=>'<option value="'+i+'"'+(i===state.who?" selected":"")+">"+esc(c.name||"未命名")+"</option>").join("");
+  const c=curChar();
+  el.whoName.value = c ? c.name : "";
+  el.whoName.disabled = !c;
+  if(!c || !c.skills.length){
+    el.skills.innerHTML='<li style="display:block"><span class="empty-note">'+(c?"这个角色还没有技能，用下面一行添加。":"还没有角色，点「新建角色」。")+"</span></li>";
+    return;
+  }
+  el.skills.innerHTML=c.skills.map((s,i)=>
+    '<li data-i="'+i+'">'+
+      '<input class="s-name" type="text" value="'+esc(s.name)+'" aria-label="技能名" autocomplete="off">'+
+      '<input class="s-val" type="number" value="'+esc(s.val)+'" min="0" max="9999" step="1" aria-label="数值">'+
+      '<button class="s-go" type="button">检定</button>'+
+      '<button class="ghost s-del" type="button" aria-label="删除技能">×</button>'+
+    "</li>").join("");
+}
+
+/* ---------- 随机表 ---------- */
+function parseTableText(text){
+  const out=[];
+  for(const raw of String(text||"").split("\n")){
+    const line=raw.trim();
+    if(!line||line.charAt(0)==="#") continue;
+    const m=line.match(/^(\d+)\s*[|｜]\s*(.+)$/);
+    if(m){ const w=parseInt(m[1],10); out.push({w:w>0?w:1, text:m[2].trim()}); }
+    else out.push({w:1, text:line});
+  }
+  return out;
+}
+function tableText(){
+  return state.table.map(r=>r.w+"|"+r.text).join("\n");
+}
+function liveRows(){
+  return state.table.map((r,i)=>({w:(Number.isFinite(r.w)&&r.w>0)?r.w:1, text:String(r.text||"").trim(), no:i+1}))
+                    .filter(r=>r.text);
+}
+function drawFrom(rows,n,unique,rng){
+  if(unique && n>rows.length) throw new Error("不重复抽取的数量不能多于有内容的条数（现在 "+rows.length+" 条）");
+  const pool=rows.slice(), picked=[];
+  for(let i=0;i<n;i++){
+    let total=0; for(const o of pool) total+=o.w;
+    let r=rng()*total, k=0;
+    for(;k<pool.length;k++){ r-=pool[k].w; if(r<0) break; }
+    if(k>=pool.length) k=pool.length-1;
+    picked.push(pool[k]);
+    if(unique) pool.splice(k,1);
+  }
+  return picked;
+}
+function autoGrow(ta){ ta.style.height="auto"; ta.style.height=(ta.scrollHeight+2)+"px"; }
+function renderTable(){
+  const sum=state.table.reduce((a,r)=>a+((Number.isFinite(r.w)&&r.w>0)?r.w:1),0)||1;
+  el.tbRows.innerHTML=state.table.map((r,i)=>{
+    const w=(Number.isFinite(r.w)&&r.w>0)?r.w:1;
+    const pct=String(r.text||"").trim() ? Math.round(w/sum*1000)/10+"%" : "—";
+    return '<div class="tb-row" data-i="'+i+'">'+
+      '<span class="tb-no">'+(i+1)+"</span>"+
+      '<input class="tb-w" type="number" min="1" max="999" step="1" value="'+esc(w)+'" aria-label="第'+(i+1)+'条权重">'+
+      '<textarea class="tb-t" rows="1" aria-label="第'+(i+1)+'条内容" spellcheck="false">'+esc(r.text||"")+"</textarea>"+
+      '<span class="tb-p">'+pct+"</span>"+
+      '<button class="ghost tb-del" type="button" aria-label="删除第'+(i+1)+'条">×</button>'+
+    "</div>";
+  }).join("");
+  el.tbRows.querySelectorAll(".tb-t").forEach(autoGrow);
+  updateTableExplain();
+}
+function updateTableExplain(){
+  const rows=liveRows(), node=el.tbExplain;
+  const blanks=state.table.length-rows.length;
+  if(!rows.length){ node.className="explain bad"; node.textContent="表里还没有带内容的条目，加一条再抽。"; return; }
+  node.className="explain";
+  let sum=0; for(const r of rows) sum+=r.w;
+  const top=rows.slice().sort((a,b)=>b.w-a.w)[0];
+  node.textContent="共 "+rows.length+" 条有效，总权重 "+sum+"。最容易抽中的是 "+top.no+" 号（"+Math.round(top.w/sum*1000)/10+"%）"
+    + (blanks>0 ? "。另有 "+blanks+" 条空内容，抽取时会跳过。" : "。");
+}
+
+/* ---------- DOM ---------- */
+const $=id=>document.getElementById(id);
+const el={seed:$("seed"), idx:$("idx"), srcTrue:$("src-true"), srcSeed:$("src-seed"), srcnote:$("srcnote"),
+  expr:$("expr"), explain:$("explain"), memo:$("memo"), skill:$("skill"), skillLabel:$("skill-label"),
+  adjRow:$("adj-row"), adjEditor:$("adj-editor"), adjName:$("adj-name"), adjVal:$("adj-val"),
+  scheme:$("scheme"), die:$("die"), checkExplain:$("check-explain"), tierEditor:$("tier-editor"), tiers:$("tiers"),
+  who:$("who"), whoName:$("who-name"), skills:$("skills"), skName:$("sk-name"), skVal:$("sk-val"),
+  bkIo:$("bk-io"), bkFlash:$("bk-flash"),
+  tbRows:$("tb-rows"), tbText:$("tb-text"), tbExplain:$("tb-explain"), tbIo:$("tb-io"),
+  draws:$("draws"), uniq:$("uniq"),
+  out:$("out"), log:$("log"), count:$("count"), flash:$("flash")};
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function flash(msg){ el.flash.textContent=msg; setTimeout(()=>{ if(el.flash.textContent===msg) el.flash.textContent=""; },2200); }
+
+function setSource(src){
+  state.source=src;
+  const seeded = src==="seed";
+  el.srcTrue.setAttribute("aria-pressed", String(!seeded));
+  el.srcSeed.setAttribute("aria-pressed", String(seeded));
+  el.seed.disabled=!seeded; el.idx.disabled=!seeded;
+  el.srcnote.innerHTML = seeded
+    ? "<b>种子模式</b>：该模式下，骰点结果由[种子 + 序号 + 表达式]唯一决定，每骰一次序号自动加一。"
+    : "<b>真随机</b>：用浏览器的加密随机数，不可复现，适合自己跑团或试手。";
+  save();
+}
+function currentRng(){
+  if(state.source==="seed"){
+    const seed=el.seed.value.trim();
+    if(!seed) throw new Error("种子不能为空");
+    const i=parseInt(el.idx.value,10);
+    if(!Number.isFinite(i)||i<0) throw new Error("序号需为 0 或正整数");
+    return {rng:seededRng(seed,i), tag:seed+" #"+i, advance:()=>{ state.index=i+1; el.idx.value=String(i+1); }};
+  }
+  return {rng:cryptoRng, tag:"", advance:()=>{}};
+}
+function showError(msg){
+  el.out.className="out";
+  el.out.innerHTML='<div class="big err">'+esc(msg)+"</div>";
+}
+function showResult(r){
+  el.out.className="out";
+  let html='<div class="big'+(r.k?" "+r.k:"")+'">'+esc(r.big)+"</div>";
+  if(r.grade) html+='<div class="grade '+r.k+'">'+esc(r.grade)+"</div>";
+  if(r.detail) html+='<div class="detail">'+esc(r.detail)+"</div>";
+  el.out.innerHTML=html;
+}
+function addLog(entry){
+  if(state.samples){ state.samples=false; state.log=[]; }
+  state.no+=1;
+  entry.no=state.no;
+  entry.memo=el.memo.value.trim();
+  entry.time=new Date().toTimeString().slice(0,5);
+  state.log.unshift(entry);
+  if(state.log.length>LOG_CAP) state.log.length=LOG_CAP;
+  renderLog(); save();
+}
+function renderLog(){
+  const items=state.log;
+  el.count.textContent = state.samples ? "示例" : items.length+" 条";
+  if(!items.length){ el.log.innerHTML='<li class="sample"><span class="no">—</span><span class="body"><span class="line1 q">日志已清空</span></span></li>'; return; }
+  el.log.innerHTML = items.map(e=>
+    '<li class="'+(state.samples?"sample":"")+'">'+
+      '<span class="no">'+(state.samples?"例":esc(e.no))+'</span>'+
+      '<span class="body">'+
+        '<span class="line1"><span class="q">'+esc(e.q)+'</span><span class="v '+(e.k||"")+'">'+esc(e.v)+'</span></span>'+
+        (e.meta?'<span class="meta">'+esc(e.meta)+"</span>":"")+
+        (e.memo?'<span class="memo">※ '+esc(e.memo)+"</span>":"")+
+      "</span>"+
+    "</li>").join("");
+}
+function logText(){
+  return state.log.slice().reverse().map(e=>{
+    let s="["+e.no+"] "+e.time+"  "+e.q+" → "+e.v;
+    if(e.meta) s+="　"+e.meta;
+    if(e.tag) s+="　〔种子 "+e.tag+"〕";
+    if(e.memo) s+="　※ "+e.memo;
+    return s;
+  }).join("\n");
+}
+function save(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify({
+      source:state.source, seed:el.seed.value, index:el.idx.value,
+      scheme:state.scheme, die:el.die.value, tiers:state.tiers, chars:state.chars, who:state.who,
+      adjs:state.adjs, memo:el.memo.value, table:state.table,
+      log:state.log, no:state.no, samples:state.samples,
+      expr:el.expr.value, skill:el.skill.value, draws:el.draws.value, uniq:el.uniq.checked
+    }));
+  }catch(e){}
+}
+function load(){
+  let d=null;
+  try{ const raw=localStorage.getItem(KEY); if(raw) d=JSON.parse(raw); }catch(e){}
+  if(!d) return false;
+  try{
+    if(d.seed) el.seed.value=d.seed;
+    if(d.index!=null) el.idx.value=d.index;
+    if(d.expr) el.expr.value=d.expr;
+    if(d.skill) el.skill.value=d.skill;
+    if(Array.isArray(d.table)&&d.table.length) state.table=d.table;
+    else if(typeof d.opts==="string"&&d.opts.trim()){
+      const migrated=parseTableText(d.opts);
+      if(migrated.length) state.table=migrated;
+    }
+    if(d.draws) el.draws.value=d.draws;
+    if(typeof d.uniq==="boolean") el.uniq.checked=d.uniq;
+    if(Array.isArray(d.log)) state.log=d.log;
+    state.no = typeof d.no==="number" ? d.no : state.log.length;
+    state.samples = d.samples===true;
+    if(Array.isArray(d.tiers)&&d.tiers.length) state.tiers=d.tiers;
+    if(Array.isArray(d.adjs)) state.adjs=d.adjs;
+    if(typeof d.memo==="string") el.memo.value=d.memo;
+    if(Array.isArray(d.chars)&&d.chars.length) state.chars=d.chars;
+    state.who = Number.isFinite(d.who)&&d.who>=0&&d.who<state.chars.length ? d.who : 0;
+    if(typeof d.die==="string"&&d.die.trim()) el.die.value=d.die;
+    setSource(d.source==="seed"?"seed":"true");
+    setScheme(d.scheme);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ---------- 动作 ---------- */
+function doFree(){
+  let p, src;
+  try{ p=parseExpr(el.expr.value); src=currentRng(); }catch(err){ return showError(err.message); }
+  const results=[];
+  for(let i=0;i<p.repeat;i++) results.push(rollOnce(p.terms, src.rng));
+  src.advance();
+  const totals=results.map(r=>r.total);
+  const q=(p.repeat>1?p.repeat+"#":"")+p.text;
+  const v=totals.join(", ");
+  const multi=p.terms.length>1;
+  const detail=results.map(r=>r.detail+(multi?" = "+r.total:"")).join("　｜　");
+  showResult({big:v, detail:detail+(src.tag?"　〔种子 "+src.tag+"〕":"")});
+  addLog({q:q, v:v, meta:detail, tag:src.tag});
+}
+function doCheck(who){
+  const base = who ? who.val : parseInt(el.skill.value,10);
+  if(!Number.isFinite(base)||base<0) return showError("技能值需为 0 或正整数");
+  const die=schemeDie();
+  let p, src, total, detail, g;
+  try{
+    p=parseExpr(die);
+    if(p.repeat>1) throw new Error("判定骰不能带重复次数（去掉 # 或 x）");
+    src=currentRng();
+    const r=rollOnce(p.terms, src.rng);
+    total=r.total; detail=r.detail+(p.terms.length>1?" = "+r.total:"");
+    g=gradeFor(total, base);
+  }catch(err){ return showError(err.message); }
+  src.advance();
+  const label = who ? who.label+"（"+base+"）" : die+" 基准 "+base;
+  const schemeName = state.scheme==="coc" ? "COC7" : state.scheme==="th" ? "单阈值" : "自定义";
+  showResult({
+    big:String(total), grade:g.label, k:g.k,
+    detail:label+"　"+schemeName+(detail.indexOf("[")>=0?"　"+detail:"")+(src.tag?"　〔种子 "+src.tag+"〕":"")
+  });
+  addLog({q:label, v:total+" "+g.label, k:g.k, meta:schemeName+" · "+detail, tag:src.tag});
+}
+function doTable(){
+  let rows, n, src, picked;
+  try{
+    rows=liveRows();
+    if(!rows.length) throw new Error("表里还没有带内容的条目");
+    n=parseInt(el.draws.value,10);
+    if(!Number.isFinite(n)||n<1||n>50) throw new Error("抽取数量需在 1–50 之间");
+    src=currentRng();
+    picked=drawFrom(rows,n,el.uniq.checked,src.rng);
+  }catch(err){ return showError(err.message); }
+  src.advance();
+  let sum=0; for(const r of rows) sum+=r.w;
+  const v=picked.map(r=>r.no+". "+r.text).join("　／　");
+  el.out.className="out";
+  el.out.innerHTML='<div class="grade ok">抽到 '+picked.length+" 条 · 候选 "+rows.length+" 条 · 总权重 "+sum+"</div>"+
+    picked.map(r=>'<div class="detail" style="font-size:14px;color:var(--ink)"><b>'+r.no+".</b> "+esc(r.text)+"</div>").join("")+
+    (src.tag?'<div class="detail">〔种子 '+esc(src.tag)+"〕</div>":"");
+  addLog({q:"随机表 ×"+picked.length, v:v, meta:"候选 "+rows.length+" 条 · 总权重 "+sum, tag:src.tag});
+}
+
+/* ---------- 绑定 ---------- */
+el.srcTrue.addEventListener("click",()=>setSource("true"));
+el.srcSeed.addEventListener("click",()=>setSource("seed"));
+el.scheme.addEventListener("change",()=>setScheme(el.scheme.value));
+el.die.addEventListener("input",()=>{ updateCheckExplain(); save(); });
+el.skill.addEventListener("input",updateCheckExplain);
+$("roll-free").addEventListener("click",doFree);
+$("roll-check").addEventListener("click",()=>doCheck(null));
+
+/* 分级表 */
+$("tier-add").addEventListener("click",()=>{
+  state.tiers.splice(Math.max(0,state.tiers.length-1),0,{name:"新等级",op:"le",val:"值",k:"ok"});
+  renderTiers(); updateCheckExplain(); save();
+});
+document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>{
+  const p=PRESETS[b.dataset.preset];
+  state.tiers=p.tiers.map(t=>Object.assign({},t));
+  el.die.value=p.die;
+  renderTiers(); updateCheckExplain(); save();
+  flash("已套用：" + b.textContent);
+}));
+el.tiers.addEventListener("input",e=>{
+  const row=e.target.closest(".tier-row"); if(!row) return;
+  const t=state.tiers[+row.dataset.i]; if(!t) return;
+  if(e.target.classList.contains("t-name")) t.name=e.target.value;
+  if(e.target.classList.contains("t-val")) t.val=e.target.value;
+  updateCheckExplain(); save();
+});
+el.tiers.addEventListener("change",e=>{
+  const row=e.target.closest(".tier-row"); if(!row) return;
+  const i=+row.dataset.i, t=state.tiers[i]; if(!t) return;
+  if(e.target.classList.contains("t-op")){ t.op=e.target.value; renderTiers(); }
+  if(e.target.classList.contains("t-k")) t.k=e.target.value;
+  updateCheckExplain(); save();
+});
+el.tiers.addEventListener("click",e=>{
+  const btn=e.target.closest(".t-del"); if(!btn) return;
+  if(state.tiers.length<=1) return flash("至少保留一级");
+  state.tiers.splice(+btn.closest(".tier-row").dataset.i,1);
+  renderTiers(); updateCheckExplain(); save();
+});
+
+/* 角色 */
+el.who.addEventListener("change",()=>{ state.who=+el.who.value; renderChars(); save(); });
+el.whoName.addEventListener("input",()=>{
+  const c=curChar(); if(!c) return;
+  c.name=el.whoName.value;
+  el.who.options[state.who].textContent=c.name||"未命名";
+  save();
+});
+$("char-new").addEventListener("click",()=>{
+  state.chars.push({name:"新角色 "+(state.chars.length+1), skills:[]});
+  state.who=state.chars.length-1; renderChars(); save(); el.whoName.focus(); el.whoName.select();
+});
+let delArmed=false, delTimer=null;
+$("char-del").addEventListener("click",e=>{
+  if(!curChar()) return;
+  if(!delArmed){ delArmed=true; e.target.textContent="再按一次删除"; delTimer=setTimeout(()=>{ delArmed=false; e.target.textContent="删除角色"; },3000); return; }
+  clearTimeout(delTimer); delArmed=false; e.target.textContent="删除角色";
+  state.chars.splice(state.who,1);
+  state.who=Math.max(0,state.who-1);
+  renderChars(); save(); flash("已删除");
+});
+$("sk-add").addEventListener("click",()=>{
+  const c=curChar(); if(!c) return flash("先新建一个角色");
+  const name=el.skName.value.trim();
+  const val=parseInt(el.skVal.value,10);
+  if(!name) return flash("技能名不能为空");
+  if(!Number.isFinite(val)||val<0) return flash("数值需为 0 或正整数");
+  c.skills.push({name:name, val:val});
+  el.skName.value=""; renderChars(); save(); el.skName.focus();
+});
+el.skName.addEventListener("keydown",e=>{ if(e.key==="Enter") $("sk-add").click(); });
+el.skills.addEventListener("input",e=>{
+  const li=e.target.closest("li[data-i]"); if(!li) return;
+  const c=curChar(); if(!c) return;
+  const s=c.skills[+li.dataset.i]; if(!s) return;
+  if(e.target.classList.contains("s-name")) s.name=e.target.value;
+  if(e.target.classList.contains("s-val")){ const v=parseInt(e.target.value,10); if(Number.isFinite(v)) s.val=v; }
+  save();
+});
+el.skills.addEventListener("click",e=>{
+  const li=e.target.closest("li[data-i]"); if(!li) return;
+  const c=curChar(); if(!c) return;
+  const i=+li.dataset.i, s=c.skills[i]; if(!s) return;
+  if(e.target.closest(".s-go")) return doCheck({val:s.val, label:(c.name||"未命名")+"·"+(s.name||"未命名技能")});
+  const del=e.target.closest(".s-del");
+  if(del){
+    if(del.dataset.armed){ c.skills.splice(i,1); renderChars(); save(); return; }
+    del.dataset.armed="1"; del.textContent="确认";
+    setTimeout(()=>{ if(del.isConnected){ delete del.dataset.armed; del.textContent="×"; } },3000);
+  }
+});
+/* 数据备份：页脚，默认收起 */
+function bkFlash(msg){ el.bkFlash.textContent=msg; setTimeout(()=>{ if(el.bkFlash.textContent===msg) el.bkFlash.textContent=""; },2600); }
+function backupPayload(){
+  return {
+    tool:"安科骰点台", v:1,
+    exported:new Date().toISOString().slice(0,19).replace("T"," ")+" UTC",
+    scheme:state.scheme, die:el.die.value,
+    tiers:state.tiers, adjs:state.adjs, table:state.table, chars:state.chars
+  };
+}
+function applyBackup(raw){
+  let d=JSON.parse(raw);
+  if(Array.isArray(d)) d={chars:d};            // 旧版只导角色，是个数组
+  if(!d||typeof d!=="object") throw new Error("格式不对");
+  const got=[];
+  if(Array.isArray(d.chars)&&d.chars.length){
+    state.chars=d.chars.map(c=>({
+      name:String(c.name||"未命名"),
+      skills:Array.isArray(c.skills)?c.skills.map(s=>({name:String(s.name||""),val:parseInt(s.val,10)||0})):[]
+    }));
+    state.who=0; renderChars(); got.push(state.chars.length+" 个角色");
+  }
+  if(Array.isArray(d.table)&&d.table.length){
+    state.table=d.table.map(r=>({w:parseInt(r.w,10)>0?parseInt(r.w,10):1, text:String(r.text||"")}));
+    renderTable(); got.push(state.table.length+" 条随机表");
+  }
+  if(Array.isArray(d.adjs)){
+    state.adjs=d.adjs.map(a=>({name:String(a.name||""), delta:parseInt(a.delta,10)||0})).filter(a=>a.name&&a.delta);
+    renderAdjs(); got.push(state.adjs.length+" 个补正");
+  }
+  if(Array.isArray(d.tiers)&&d.tiers.length){
+    state.tiers=d.tiers.map(t=>({
+      name:String(t.name||""),
+      op:["le","ge","eq","else"].indexOf(t.op)>=0?t.op:"le",
+      val:String(t.val==null?"":t.val),
+      k:String(t.k||"")
+    }));
+    got.push("分级表");
+  }
+  if(typeof d.die==="string"&&d.die.trim()) el.die.value=d.die.trim();
+  if(typeof d.scheme==="string") setScheme(d.scheme);
+  else { renderTiers(); updateCheckExplain(); }
+  if(!got.length) throw new Error("里面没有可导入的内容");
+  save();
+  return got.join("、");
+}
+$("backup-toggle").addEventListener("click",e=>{
+  const box=$("backup");
+  box.hidden=!box.hidden;
+  e.target.textContent=box.hidden?"数据备份":"数据备份（收起）";
+});
+$("bk-export").addEventListener("click",()=>{
+  el.bkIo.value=JSON.stringify(backupPayload(),null,1);
+  bkFlash("已导出当前全部数据");
+});
+$("bk-copy").addEventListener("click",()=>{
+  let text=el.bkIo.value.trim();
+  if(!text){ text=JSON.stringify(backupPayload(),null,1); el.bkIo.value=text; }
+  navigator.clipboard.writeText(text)
+    .then(()=>bkFlash("已复制到剪贴板"))
+    .catch(()=>bkFlash("复制被浏览器拒绝，请手动选中下框"));
+});
+$("bk-clear").addEventListener("click",()=>{
+  if(!el.bkIo.value) return bkFlash("下框已经是空的");
+  el.bkIo.value=""; bkFlash("已清空下框（数据本身没动）");
+});
+let bkArmed=false, bkTimer=null;
+$("bk-import").addEventListener("click",e=>{
+  if(!el.bkIo.value.trim()) return bkFlash("下框是空的");
+  if(!bkArmed){
+    bkArmed=true; e.target.textContent="再按一次覆盖现有数据";
+    bkTimer=setTimeout(()=>{ bkArmed=false; e.target.textContent="从下框导入"; },4000);
+    return;
+  }
+  clearTimeout(bkTimer); bkArmed=false; e.target.textContent="从下框导入";
+  try{ bkFlash("已导入："+applyBackup(el.bkIo.value)); }
+  catch(err){ bkFlash("导入失败：" + (err.message==="格式不对"||err.message.indexOf("没有可导入")>=0 ? err.message : "这不是一份有效的备份")); }
+});
+$("roll-table").addEventListener("click",doTable);
+el.expr.addEventListener("keydown",e=>{ if(e.key==="Enter") doFree(); });
+el.expr.addEventListener("input",()=>{ updateExplain(); save(); });
+el.memo.addEventListener("input",save);
+$("idx-reset").addEventListener("click",()=>{
+  state.index=1; el.idx.value="1"; save();
+  flash(state.source==="seed"?"序号已复位到 1":"序号已复位（当前是纯随机，用不到它）");
+});
+
+/* 常用补正 */
+$("adj-edit").addEventListener("click",e=>{
+  state.adjEdit=!state.adjEdit;
+  e.target.textContent=state.adjEdit?"完成":"管理";
+  el.adjEditor.hidden=!state.adjEdit;
+  renderAdjs();
+});
+$("adj-add").addEventListener("click",()=>{
+  const name=el.adjName.value.trim();
+  const delta=parseInt(el.adjVal.value,10);
+  if(!name) return flash("补正名称不能为空");
+  if(!Number.isFinite(delta)||delta===0) return flash("数值需为非 0 的整数");
+  state.adjs.push({name:name, delta:delta});
+  el.adjName.value=""; renderAdjs(); save(); el.adjName.focus();
+});
+el.adjName.addEventListener("keydown",e=>{ if(e.key==="Enter") $("adj-add").click(); });
+el.adjRow.addEventListener("click",e=>{
+  const btn=e.target.closest(".adj"); if(!btn) return;
+  const i=+btn.dataset.i, a=state.adjs[i]; if(!a) return;
+  if(state.adjEdit){ state.adjs.splice(i,1); renderAdjs(); save(); flash("已删除「"+a.name+"」"); return; }
+  applyAdj(a);
+  el.expr.focus();
+  el.expr.setSelectionRange(el.expr.value.length, el.expr.value.length);
+});
+el.skill.addEventListener("keydown",e=>{ if(e.key==="Enter") doCheck(); });
+el.seed.addEventListener("change",save);
+el.idx.addEventListener("change",save);
+
+/* 随机表 */
+$("tb-add").addEventListener("click",()=>{
+  state.table.push({w:1, text:""});
+  renderTable(); save();
+  const last=el.tbRows.querySelector(".tb-row:last-child .tb-t");
+  if(last) last.focus();
+});
+$("tb-io-toggle").addEventListener("click",e=>{
+  el.tbIo.hidden=!el.tbIo.hidden;
+  e.target.textContent=el.tbIo.hidden?"批量":"收起";
+  if(!el.tbIo.hidden && !el.tbText.value.trim()) el.tbText.value=tableText();
+});
+$("tb-export").addEventListener("click",()=>{ el.tbText.value=tableText(); flash("已导出 "+state.table.length+" 条"); });
+$("tb-import").addEventListener("click",()=>{
+  const rows=parseTableText(el.tbText.value);
+  if(!rows.length) return flash("下框里没有可用的条目");
+  state.table=rows; renderTable(); save(); flash("已导入 "+rows.length+" 条");
+});
+el.tbRows.addEventListener("input",e=>{
+  const row=e.target.closest(".tb-row"); if(!row) return;
+  const r=state.table[+row.dataset.i]; if(!r) return;
+  if(e.target.classList.contains("tb-w")){
+    const w=parseInt(e.target.value,10);
+    r.w=Number.isFinite(w)&&w>0?w:1;
+  }
+  if(e.target.classList.contains("tb-t")){ r.text=e.target.value; autoGrow(e.target); }
+  // 概率随权重和内容变化，就地更新不重绘，避免打断输入
+  const sum=state.table.reduce((a,x)=>a+((Number.isFinite(x.w)&&x.w>0)?x.w:1),0)||1;
+  el.tbRows.querySelectorAll(".tb-row").forEach(node=>{
+    const item=state.table[+node.dataset.i];
+    if(!item) return;
+    const w=(Number.isFinite(item.w)&&item.w>0)?item.w:1;
+    node.querySelector(".tb-p").textContent = String(item.text||"").trim() ? Math.round(w/sum*1000)/10+"%" : "—";
+  });
+  updateTableExplain(); save();
+});
+el.tbRows.addEventListener("click",e=>{
+  const btn=e.target.closest(".tb-del"); if(!btn) return;
+  if(state.table.length<=1) return flash("至少保留一条");
+  state.table.splice(+btn.closest(".tb-row").dataset.i,1);
+  renderTable(); save();
+});
+document.querySelectorAll("[data-expr]").forEach(b=>b.addEventListener("click",()=>{
+  el.expr.value=b.dataset.expr;
+  updateExplain(); save();
+  el.expr.focus();
+  el.expr.setSelectionRange(el.expr.value.length, el.expr.value.length);
+}));
+document.querySelectorAll('[role="tab"]').forEach(tab=>tab.addEventListener("click",()=>{
+  document.querySelectorAll('[role="tab"]').forEach(t=>t.setAttribute("aria-selected",String(t===tab)));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("on", p.id===tab.getAttribute("aria-controls")));
+  // 隐藏时量不到高度，切回来重新撑开内容框
+  if(tab.id==="tab-table") el.tbRows.querySelectorAll(".tb-t").forEach(autoGrow);
+}));
+$("theme").addEventListener("click",()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  const dark = cur ? cur==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.setAttribute("data-theme", dark?"light":"dark");
+});
+$("copy").addEventListener("click",()=>{
+  const text=logText();
+  if(!text) return flash("日志是空的");
+  navigator.clipboard.writeText(text).then(()=>flash("已复制 "+state.log.length+" 条")).catch(()=>flash("复制被浏览器拒绝"));
+});
+let armed=false, armTimer=null;
+$("clear").addEventListener("click",e=>{
+  if(!armed){ armed=true; e.target.textContent="再按一次清空"; armTimer=setTimeout(()=>{ armed=false; e.target.textContent="清空"; },3000); return; }
+  clearTimeout(armTimer); armed=false; e.target.textContent="清空";
+  state.log=[]; state.no=0; state.samples=false; renderLog(); save(); flash("已清空");
+});
+
+/* ---------- 启动 ---------- */
+if(!load()){
+  state.samples=true;
+  state.log=[
+    {no:"例", time:"", q:"d100 ≤60 分级", v:"24 困难成功", k:"ok", meta:"", tag:""},
+    {no:"例", time:"", q:"3#d100", v:"7, 88, 41", meta:"1d100[7]　｜　1d100[88]　｜　1d100[41]", tag:""},
+    {no:"例", time:"", q:"随机表 ×1", v:"电话响了，来电显示是自己的号码", meta:"候选 5 条", tag:""}
+  ];
+  setSource("true"); setScheme("coc");
+}
+updateExplain();
+renderAdjs();
+renderTable();
+renderChars();
+renderLog();
+})();
+</script>
+</body>
+</html>
