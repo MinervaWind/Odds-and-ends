@@ -96,6 +96,11 @@
   .rep{color:var(--muted);border:1px dashed var(--border);border-radius:5px;padding:1px 5px;font-size:11px;white-space:nowrap}
   .rep.must{border-style:solid;border-color:var(--border2);color:var(--text);opacity:.75}
   .chip.wd{padding:6px 0;width:36px;justify-content:center}
+  /* 鼠标划不动横向滚动条，所以在指针设备上直接换行铺开 */
+  @media (hover:hover) and (pointer:fine){
+    .filters,.pick .scopebar{flex-wrap:wrap;overflow-x:visible}
+    .filters .chip,.pick .scopebar .chip{flex:0 0 auto}
+  }
   .strip{display:inline-flex;gap:4px;align-items:flex-end}
   .strip b{display:flex;flex-direction:column;align-items:center;gap:3px;
     font-weight:400;font-size:9px;line-height:1;color:var(--faint);width:9px}
@@ -247,9 +252,9 @@
   <h2>同步设置 · 数据存进你自己的私有仓库</h2>
   <div class="dstat" id="sStat"></div>
 
-  <div class="lbl">仓库</div>
-  <div class="frow"><span>owner</span><input type="text" id="sOwner" placeholder="MinervaWind" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-  <div class="frow"><span>repo</span><input type="text" id="sRepo" placeholder="todo-data" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+  <div class="lbl">仓库 · 灰字是提示，三格都要自己填</div>
+  <div class="frow"><span>owner</span><input type="text" id="sOwner" placeholder="GitHub 用户名" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+  <div class="frow"><span>repo</span><input type="text" id="sRepo" placeholder="私有仓库名（区分大小写）" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
   <div class="frow"><span>文件</span><input type="text" id="sPath" placeholder="data.json" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
   <div class="frow"><span>分支</span><input type="text" id="sBranch" placeholder="留空＝默认分支" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
 
@@ -1051,7 +1056,7 @@
     el.sToken.value=GH.token;
     el.sStat.innerHTML=ghOn()
       ? "当前：<b>"+esc(GH.owner+"/"+GH.repo+" · "+GH.path)+"</b><br>"+esc(syncMsg||"已连接")
-      : "还没接上。接上之后，手机和电脑会读写同一个文件。";
+      : "还没接上。填下面的 owner、repo、token 三项，先点「测试连接」。";
     el.sMsg.textContent="";
   }
   function readForm(){
