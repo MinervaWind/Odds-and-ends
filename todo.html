@@ -96,9 +96,14 @@
   .rep{color:var(--muted);border:1px dashed var(--border);border-radius:5px;padding:1px 5px;font-size:11px;white-space:nowrap}
   .rep.must{border-style:solid;border-color:var(--border2);color:var(--text);opacity:.75}
   .chip.wd{padding:6px 0;width:36px;justify-content:center}
+  .views{display:flex;gap:7px;overflow-x:auto;padding:8px 0 0;scrollbar-width:none}
+  .views::-webkit-scrollbar{display:none}
+  .chip.vw{font-size:13px;padding:5px 12px;background:transparent;border-style:dashed}
+  .chip.vw.on{background:var(--surface2);border-style:solid;color:var(--text);border-color:var(--border2)}
+  .chip.vw.edit{padding:5px 10px;opacity:.6}
   /* 鼠标划不动横向滚动条，所以在指针设备上直接换行铺开 */
   @media (hover:hover) and (pointer:fine){
-    .filters,.pick .scopebar{flex-wrap:wrap;overflow-x:visible}
+    .filters,.views,.pick .scopebar{flex-wrap:wrap;overflow-x:visible}
     .filters .chip,.pick .scopebar .chip{flex:0 0 auto}
   }
   .strip{display:inline-flex;gap:4px;align-items:flex-end}
@@ -215,6 +220,7 @@
       <button class="btn btn-icon" id="btnMenu">分类</button>
       <button class="btn btn-pick" id="btnPick">抽一个</button>
     </div>
+    <div class="views" id="views"></div>
     <div class="filters" id="filters"></div>
   </header>
 
@@ -343,8 +349,19 @@
   <div id="catEditor"></div>
   <div class="sheet-act">
     <button class="btn" id="catAdd">＋ 新分类</button>
+    <button class="btn" id="catViews">栏目…</button>
     <button class="btn btn-primary" id="catClose">完成</button>
   </div>
+</div></div>
+
+<div class="scrim" id="scrimViews"><div class="sheet">
+  <h2>管理栏目 · 一个栏目＝一组分类，只改展示</h2>
+  <div id="viewEditor"></div>
+  <div class="sheet-act">
+    <button class="btn" id="viewAdd">＋ 新栏目</button>
+    <button class="btn btn-primary" id="viewClose">完成</button>
+  </div>
+  <div class="hint">切到某个栏目后，不在它里面的分类连筛选条都不出现。<br>同一个分类可以放进多个栏目。栏目的定义会同步，但「当前在哪个栏目」只存本机——手机在单位切到工作，不会把家里的电脑也切过去。</div>
 </div></div>
 
 <div class="scrim center" id="scrimPick"><div class="pick">
@@ -376,9 +393,11 @@
 
   var K={tasks:"todo.tasks.v1",cats:"todo.cats.v1",filter:"todo.filter.v1",
          showDone:"todo.showdone.v1",showOff:"todo.showoff.v1",theme:"todo.theme.v1",
-         dropped:"todo.dropped.v1",gh:"todo.gh.v1"};
+         dropped:"todo.dropped.v1",gh:"todo.gh.v1",
+         views:"todo.views.v1",view:"todo.view.v1"};
 
   var tasks=[],cats=DEFAULT_CATS.slice(),filter=new Set(),showDone=false,showOff=false;
+  var views=[],activeView=null;        // 栏目＝一组分类的命名集合。只影响展示，不影响任务结构。
   var expanded=new Set();
   var localEditAt=0;
   var sheets=0,pendingRemote=null,catsAt=0;
@@ -392,10 +411,11 @@
   }
 
   var el={};
-  ["count","filters","newTxt","btnAdd","btnPick","btnMenu","btnTheme","list","empty",
+  ["count","filters","views","newTxt","btnAdd","btnPick","btnMenu","btnTheme","list","empty",
    "doneWrap","doneList","btnToggleDone","syncNote","toast","todayWrap","todayLabel","todayList","offWrap","offList","btnToggleOff",
    "scrimEdit","editTxt","editCats","editDue","editRep","repHint","repPresets","dueRow","mustRow","editMust","mustHint","editHasNote","editNote","editDel","editCancel","editSave",
-   "scrimCats","catEditor","catAdd","catClose",
+   "scrimCats","catEditor","catAdd","catClose","catViews",
+   "scrimViews","viewEditor","viewAdd","viewClose",
    "scrimPick","pickScope","pickBody","pickClose","pickAgain","pickDone",
    "btnData","scrimData","dStat","dCopyJson","dCopyLog","dDlJson","dDlLog","dOut","dIn","dFile","dMerge","dReplace","dClose",
    "btnSync","scrimSync","sStat","sOwner","sRepo","sPath","sBranch","sToken","sTest","sSave","sClear","sClose","sMsg"
@@ -535,7 +555,7 @@
 
   function serialize(){
     pruneDropped();
-    return JSON.stringify({format:FORMAT,v:2,at:catsAt,cats:cats,tasks:tasks,
+    return JSON.stringify({format:FORMAT,v:3,at:catsAt,cats:cats,views:views,tasks:tasks,
                            deleted:dropped,savedAt:new Date().toISOString()},null,1);
   }
   function absorb(d){
@@ -545,9 +565,14 @@
         if(!dropped[k]||dropped[k]<d.deleted[k])dropped[k]=d.deleted[k];
       });
     if(Array.isArray(d.tasks))tasks=mergeTasks(d.tasks);
-    if(Array.isArray(d.cats)&&d.cats.length&&(d.at||0)>catsAt){cats=d.cats;catsAt=d.at;}
+    if(Array.isArray(d.cats)&&d.cats.length&&(d.at||0)>catsAt){
+      cats=d.cats;
+      if(Array.isArray(d.views))views=d.views;
+      catsAt=d.at;
+      if(activeView&&!viewOf(activeView)){activeView=null;lsSet(K.view,null);}
+    }
     pruneDropped();
-    lsSet(K.tasks,tasks);lsSet(K.cats,cats);lsSet(K.dropped,dropped);
+    lsSet(K.tasks,tasks);lsSet(K.cats,cats);lsSet(K.views,views);lsSet(K.dropped,dropped);
     render();
   }
 
@@ -608,10 +633,34 @@
 
   /* ---------- render ---------- */
   /* three buckets: 今天还要做的 / 今天已做的例行 / 一次性做完归档的 */
+  /* 当前栏目允许的分类；没选栏目就是全部 */
+  function viewOf(id){for(var i=0;i<views.length;i++)if(views[i].id===id)return views[i];return null;}
+  function viewSet(){
+    var v=viewOf(activeView);
+    if(!v)return null;
+    var s=new Set(v.cats||[]);
+    return s;
+  }
+  function visibleCats(){
+    var vs=viewSet();
+    return vs?cats.filter(function(c){return vs.has(c.id);}):cats;
+  }
+  function defaultCat(){
+    var vc=visibleCats();
+    if(filter.size===1){
+      var only=Array.from(filter)[0];
+      if(!vs0(only))return only;
+    }
+    return (vc[0]||cats[0]||{}).id;
+  }
+  function vs0(id){var vs=viewSet();return vs&&!vs.has(id);}
+
   function buckets(scope){
-    var f=scope!==undefined?scope:filter,
+    var vs=viewSet(),
+        f=scope!==undefined?scope:filter,
         b={active:[],todayDone:[],archived:[],offday:[]};
     tasks.forEach(function(t){
+      if(vs&&!vs.has(t.cat))return;              // 不在当前栏目里的，整条都不出现
       if(f&&f.size&&!f.has(t.cat))return;
       if(isRep(t)){
         if(!onToday(t)){b.offday.push(t);return;}  // 今天不轮到它，但要找得到
@@ -635,7 +684,7 @@
     var c={},total=0;
     buckets(new Set()).active.forEach(function(t){c[t.cat]=(c[t.cat]||0)+1;total++;});
     var h='<button class="chip'+(filter.size===0?" on":"")+'" data-f="*">全部<span class="n">'+total+'</span></button>';
-    cats.forEach(function(k){
+    visibleCats().forEach(function(k){
       h+='<button class="chip'+(filter.has(k.id)?" on":"")+'" data-f="'+esc(k.id)+'"'
        +(filter.has(k.id)?' style="border-color:'+k.color+'"':'')+'>'
        +'<span class="dot" style="background:'+k.color+'"></span>'+esc(k.name)
@@ -663,8 +712,18 @@
       +'</li>';
   }
 
+  function renderViews(){
+    if(!views.length){el.views.innerHTML="";el.views.style.display="none";return;}
+    el.views.style.display="";
+    var h='<button class="chip vw'+(activeView===null?" on":"")+'" data-v="*">全部</button>';
+    views.forEach(function(v){
+      h+='<button class="chip vw'+(activeView===v.id?" on":"")+'" data-v="'+esc(v.id)+'">'+esc(v.name)+'</button>';
+    });
+    el.views.innerHTML=h+'<button class="chip vw edit" data-v="#edit" title="管理栏目">⋯</button>';
+  }
   function render(){
     curDay=today();
+    renderViews();
     renderFilters();
     var b=buckets(), all=buckets(new Set());
     var v=b.active.sort(sortT);
@@ -718,7 +777,7 @@
   /* ---------- actions ---------- */
   function addTask(text){
     text=(text||"").trim(); if(!text)return;
-    var cat=filter.size===1?Array.from(filter)[0]:(cats[0]&&cats[0].id);
+    var cat=defaultCat();
     var t={id:uid(),text:text,cat:cat,due:"",note:"",repeat:"",days:[],log:[],done:false,doneAt:0,created:Date.now()};
     tasks.push(t); pushTask(t); render();
   }
@@ -871,7 +930,10 @@
       var gone=cats[i].id,fb=cats[i===0?1:0].id,moved=0;
       tasks.forEach(function(t){if(t.cat===gone){t.cat=fb;pushTask(t);moved++;}});
       filter.delete(gone); cats.splice(i,1); armed=null;
-      pushCats(); renderCats(); render();
+      views.forEach(function(v){
+        var k=(v.cats||[]).indexOf(gone); if(k>=0)v.cats.splice(k,1);
+      });
+      pushCats(); lsSet(K.views,views); renderCats(); render();
       if(moved)toast(moved+" 条已移到「"+catOf(fb).name+"」");
     }
   });
@@ -894,12 +956,103 @@
   el.catClose.addEventListener("click",closeCats);
   el.btnMenu.addEventListener("click",function(){armed=null;renderCats();sheetOpen(el.scrimCats);});
 
+  /* ---------- 栏目 ---------- */
+  function pushViews(){
+    catsAt=Date.now(); lsSet(K.views,views); localEditAt=catsAt; schedulePush();
+  }
+  var vArmed=null;
+  function renderViewEditor(){
+    if(!views.length){
+      el.viewEditor.innerHTML='<div class="hint" style="margin:0 0 4px">还没有栏目。<br>'
+        +'建一个，勾上它该包含的分类——比如「工作」只勾实习相关的，上班时切过去，'
+        +'其他分类连带它们的待办都不会出现在眼前。</div>';
+      return;
+    }
+    el.viewEditor.innerHTML=views.map(function(v){
+      return '<div class="crow" data-vid="'+esc(v.id)+'">'
+        +'<div class="top">'
+          +'<input class="cname" type="text" value="'+esc(v.name)+'" data-act="vname" maxlength="10">'
+          +'<button class="rm'+(vArmed===v.id?" arm":"")+'" data-act="vrm">'+(vArmed===v.id?"确认删除":"删除")+'</button>'
+        +'</div>'
+        +'<div class="cats" style="margin-top:10px">'+cats.map(function(c){
+            var on=(v.cats||[]).indexOf(c.id)>=0;
+            return '<button class="chip'+(on?" on":"")+'" data-act="vcat" data-cid="'+esc(c.id)+'"'
+              +(on?' style="border-color:'+c.color+'"':'')+'>'
+              +'<span class="dot" style="background:'+c.color+'"></span>'+esc(c.name)+'</button>';
+          }).join("")+'</div>'
+        +((v.cats||[]).length?'':'<div class="hint" style="margin-top:7px">一个分类都没勾，这个栏目切过去会是空的。</div>')
+        +'</div>';
+    }).join("");
+  }
+  function collectViews(){
+    var out=[];
+    Array.prototype.forEach.call(el.viewEditor.querySelectorAll("[data-vid]"),function(r){
+      var id=r.getAttribute("data-vid"),
+          nm=(r.querySelector(".cname").value||"").trim(),
+          old=viewOf(id),picked=[];
+      Array.prototype.forEach.call(r.querySelectorAll('[data-act="vcat"].on'),function(b){
+        picked.push(b.getAttribute("data-cid"));
+      });
+      out.push({id:id,name:nm||(old?old.name:"未命名"),cats:picked});
+    });
+    if(out.length||!views.length)views=out;
+    return views;
+  }
+  el.viewEditor.addEventListener("click",function(e){
+    var r=e.target.closest("[data-vid]"); if(!r)return;
+    var act=e.target.closest("[data-act]");
+    act=act&&act.getAttribute("data-act");
+    if(act!=="vcat"&&act!=="vrm")return;
+    collectViews();
+    var id=r.getAttribute("data-vid"),v=viewOf(id); if(!v)return;
+    if(act==="vcat"){
+      var cid=e.target.closest("[data-cid]").getAttribute("data-cid"),
+          i=v.cats.indexOf(cid);
+      if(i>=0)v.cats.splice(i,1); else v.cats.push(cid);
+      vArmed=null; pushViews(); renderViewEditor(); render();
+    }else{
+      if(vArmed!==id){vArmed=id;renderViewEditor();return;}
+      vArmed=null;
+      views=views.filter(function(x){return x.id!==id;});
+      if(activeView===id){activeView=null;lsSet(K.view,null);}
+      pushViews(); renderViewEditor(); render();
+    }
+  });
+  el.viewEditor.addEventListener("input",function(e){
+    if(e.target.getAttribute("data-act")!=="vname")return;
+    clearTimeout(el.viewEditor._t);
+    el.viewEditor._t=setTimeout(function(){collectViews();pushViews();render();},400);
+  });
+  el.viewAdd.addEventListener("click",function(){
+    collectViews();
+    views.push({id:uid(),name:"新栏目",cats:[]});
+    vArmed=null; pushViews(); renderViewEditor(); render();
+    if(el.viewEditor.lastElementChild)el.viewEditor.lastElementChild.scrollIntoView({block:"nearest"});
+  });
+  function openViews(){vArmed=null;renderViewEditor();sheetOpen(el.scrimViews);}
+  function closeViews(){
+    clearTimeout(el.viewEditor._t);
+    collectViews(); vArmed=null; pushViews(); render();
+    sheetShut(el.scrimViews);
+  }
+  el.viewClose.addEventListener("click",closeViews);
+  el.catViews.addEventListener("click",function(){closeCats();openViews();});
+  el.views.addEventListener("click",function(e){
+    var b=e.target.closest("[data-v]"); if(!b)return;
+    var v=b.getAttribute("data-v");
+    if(v==="#edit"){openViews();return;}
+    activeView = v==="*" ? null : v;
+    lsSet(K.view,activeView);
+    filter.clear(); lsSet(K.filter,[]);     // 换栏目等于换场景，旧的筛选不该跟过来
+    render();
+  });
+
   /* ---------- pick, with its own scope ---------- */
   var scope=null, picked=null;   // scope: null = 全部, or a cat id
   function renderScope(){
     var act=buckets(new Set()).active;
     var h='<button class="chip'+(scope===null?" on":"")+'" data-s="*">全部<span class="n">'+act.length+'</span></button>';
-    cats.forEach(function(c){
+    visibleCats().forEach(function(c){
       var n=act.filter(function(t){return t.cat===c.id;}).length;
       h+='<button class="chip'+(scope===c.id?" on":"")+'" data-s="'+esc(c.id)+'"'
         +(scope===c.id?' style="border-color:'+c.color+'"':'')+'>'
@@ -952,8 +1105,8 @@
   /* ---------- backup ---------- */
   var FORMAT="suishou-todo-1";
   function snapshotJSON(){
-    return JSON.stringify({format:FORMAT,exportedAt:new Date().toISOString(),
-                           cats:cats,tasks:tasks},null,1);
+    return JSON.stringify({format:FORMAT,v:3,exportedAt:new Date().toISOString(),
+                           at:catsAt,cats:cats,views:views,tasks:tasks,deleted:dropped},null,1);
   }
   function logText(){
     var reps=tasks.filter(isRep);
@@ -1018,11 +1171,13 @@
     if(!o||!Array.isArray(o.tasks)){toast("这份数据里没有待办");return null;}
     o.tasks=o.tasks.filter(function(t){return t&&t.id&&typeof t.text==="string";});
     if(!Array.isArray(o.cats)||!o.cats.length)o.cats=cats;
+    if(!Array.isArray(o.views))o.views=null;
     return o;
   }
   function afterImport(msg){
-    lsSet(K.tasks,tasks); lsSet(K.cats,cats); lsSet(K.dropped,dropped);
+    lsSet(K.tasks,tasks); lsSet(K.cats,cats); lsSet(K.views,views); lsSet(K.dropped,dropped);
     catsAt=Date.now(); localEditAt=catsAt;
+    if(activeView&&!viewOf(activeView)){activeView=null;lsSet(K.view,null);}
     flushNow();
     renderData(); render(); toast(msg);
   }
@@ -1033,6 +1188,10 @@
     tasks=mergeTasks(o.tasks);
     var known={}; cats.forEach(function(c){known[c.id]=1;});
     o.cats.forEach(function(c){if(c&&c.id&&!known[c.id])cats.push(c);});
+    if(o.views){                                   // 栏目按 id 并进来，已有的不动
+      var kv={}; views.forEach(function(v){kv[v.id]=1;});
+      o.views.forEach(function(v){if(v&&v.id&&!kv[v.id])views.push(v);});
+    }
     afterImport("已合并，"+before+" → "+tasks.length+" 条");
   });
   el.dReplace.addEventListener("click",function(){
@@ -1045,7 +1204,8 @@
     el.dReplace.dataset.arm=""; el.dReplace.textContent="覆盖";
     var keep={}; o.tasks.forEach(function(t){keep[t.id]=1;});
     tasks.forEach(function(t){if(!keep[t.id])dropTask(t.id);});   // clear the remote copies too
-    tasks=o.tasks; cats=o.cats; filter.clear(); expanded.clear();
+    tasks=o.tasks; cats=o.cats; if(o.views)views=o.views;
+    filter.clear(); expanded.clear(); activeView=null; lsSet(K.view,null);
     afterImport("已覆盖，现在 "+tasks.length+" 条");
   });
 
@@ -1143,10 +1303,11 @@
   el.btnAdd.addEventListener("click",function(){addTask(el.newTxt.value);el.newTxt.value="";});
   el.newTxt.addEventListener("keydown",function(e){if(e.key==="Enter"){addTask(el.newTxt.value);el.newTxt.value="";}});
 
-  [el.scrimEdit,el.scrimCats,el.scrimPick,el.scrimData,el.scrimSync].forEach(function(s){
+  [el.scrimEdit,el.scrimCats,el.scrimPick,el.scrimData,el.scrimSync,el.scrimViews].forEach(function(s){
     s.addEventListener("click",function(e){
       if(e.target!==s)return;
       if(s===el.scrimCats){closeCats();return;}
+      if(s===el.scrimViews){closeViews();return;}
       if(s===el.scrimEdit){closeEdit();return;}
       sheetShut(s);
     });
@@ -1163,6 +1324,9 @@
   var lc=lsGet(K.cats,null); if(lc&&lc.length)cats=lc;
   var lf=lsGet(K.filter,null); if(lf&&lf.length)filter=new Set(lf);
   dropped=lsGet(K.dropped,{})||{};
+  views=lsGet(K.views,[])||[];
+  activeView=lsGet(K.view,null);
+  if(activeView&&!viewOf(activeView))activeView=null;
   showDone=!!lsGet(K.showDone,false);
   showOff=!!lsGet(K.showOff,false);
   ghLoad();
