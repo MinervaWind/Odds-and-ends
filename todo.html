@@ -96,6 +96,27 @@
   .rep{color:var(--muted);border:1px dashed var(--border);border-radius:5px;padding:1px 5px;font-size:11px;white-space:nowrap}
   .rep.must{border-style:solid;border-color:var(--border2);color:var(--text);opacity:.75}
   .chip.wd{padding:6px 0;width:36px;justify-content:center}
+  .mhead{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:10px}
+  .mhead span{font-size:15px;font-variant-numeric:tabular-nums;min-width:120px;text-align:center}
+  .mdow,.mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .mdow{margin-bottom:4px}
+  .mdow i{font-style:normal;font-size:11px;color:var(--faint);text-align:center}
+  .mgrid button{all:unset;cursor:pointer;aspect-ratio:1;border-radius:8px;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    border:1px solid transparent;background:var(--sunk);font-size:12px;color:var(--muted)}
+  .mgrid button.pad{background:transparent;cursor:default}
+  .mgrid button.l1{background:color-mix(in srgb,var(--accent) 18%,var(--sunk));color:var(--text)}
+  .mgrid button.l2{background:color-mix(in srgb,var(--accent) 36%,var(--sunk));color:var(--text)}
+  .mgrid button.l3{background:color-mix(in srgb,var(--accent) 58%,var(--sunk));color:var(--accent-fg)}
+  .mgrid button.l4{background:var(--accent);color:var(--accent-fg)}
+  .mgrid button.now{border-color:var(--border2)}
+  .mgrid button.sel{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--text)}
+  .mgrid button b{font-weight:600;font-size:9.5px;opacity:.85}
+  .dlist{margin-top:10px}
+  .dlist .di{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--border);font-size:14px}
+  .dlist .di:first-child{border-top:none}
+  .dlist .di .dot{width:7px;height:7px;border-radius:50%;margin-top:7px;flex:0 0 auto}
+  .dlist .kind{font-size:11px;color:var(--faint);border:1px solid var(--border);border-radius:5px;padding:0 5px;margin-left:auto;white-space:nowrap}
   .views{display:flex;gap:7px;overflow-x:auto;padding:8px 0 0;scrollbar-width:none}
   .views::-webkit-scrollbar{display:none}
   .chip.vw{font-size:13px;padding:5px 12px;background:transparent;border-style:dashed}
@@ -249,8 +270,10 @@
 
   <div class="note" id="syncNote"></div>
   <div class="note">
-    <button class="linkbtn" id="btnSync">同步设置</button>
+    <button class="linkbtn" id="btnLog">回顾</button>
+    　<button class="linkbtn" id="btnSync">同步设置</button>
     　<button class="linkbtn" id="btnData">备份与导出</button>
+    <div style="margin-top:7px;opacity:.55" id="verLine"></div>
   </div>
 </div>
 
@@ -288,6 +311,9 @@
   <div class="sheet-act" style="margin-top:0">
     <button class="btn" id="dDlJson">下载备份 (JSON)</button>
     <button class="btn" id="dDlLog">下载打卡记录</button>
+  </div>
+  <div class="sheet-act" style="margin-top:9px">
+    <button class="btn" id="dDlByDate">下载按日期的记录</button>
   </div>
   <div class="sheet-act" style="margin-top:9px">
     <button class="btn btn-ghost" id="dCopyJson">复制备份</button>
@@ -354,6 +380,23 @@
   </div>
 </div></div>
 
+<div class="scrim" id="scrimLog"><div class="sheet">
+  <h2>回顾 · 每天实际做掉了什么</h2>
+  <div class="mhead">
+    <button class="btn btn-icon" id="logPrev">‹</button>
+    <span id="logTitle"></span>
+    <button class="btn btn-icon" id="logNext">›</button>
+  </div>
+  <div class="mdow" id="logDow"></div>
+  <div class="mgrid" id="logGrid"></div>
+  <div class="dstat" id="logSum" style="margin-top:12px"></div>
+  <div id="logDay"></div>
+  <div class="sheet-act">
+    <button class="btn" id="logToday">回到今天</button>
+    <button class="btn btn-primary" id="logClose">关闭</button>
+  </div>
+</div></div>
+
 <div class="scrim" id="scrimViews"><div class="sheet">
   <h2>管理栏目 · 一个栏目＝一组分类，只改展示</h2>
   <div id="viewEditor"></div>
@@ -380,6 +423,8 @@
 (function(){
   "use strict";
 
+  var VERSION="1.2.0";
+
   var DEFAULT_CATS=[
     {id:"hw",     name:"作业",    color:"#e0674f"},
     {id:"ddl",    name:"复习ddl", color:"#d94f6a"},
@@ -394,9 +439,10 @@
   var K={tasks:"todo.tasks.v1",cats:"todo.cats.v1",filter:"todo.filter.v1",
          showDone:"todo.showdone.v1",showOff:"todo.showoff.v1",theme:"todo.theme.v1",
          dropped:"todo.dropped.v1",gh:"todo.gh.v1",
-         views:"todo.views.v1",view:"todo.view.v1"};
+         views:"todo.views.v1",view:"todo.view.v1",salvage:"todo.salvage.v1"};
 
   var tasks=[],cats=DEFAULT_CATS.slice(),filter=new Set(),showDone=false,showOff=false;
+  var salvage=[];   // 删掉的待办里，有完成记录的那部分留在这儿，不跟着任务消失
   var views=[],activeView=null;        // 栏目＝一组分类的命名集合。只影响展示，不影响任务结构。
   var expanded=new Set();
   var localEditAt=0;
@@ -418,6 +464,8 @@
    "scrimViews","viewEditor","viewAdd","viewClose",
    "scrimPick","pickScope","pickBody","pickClose","pickAgain","pickDone",
    "btnData","scrimData","dStat","dCopyJson","dCopyLog","dDlJson","dDlLog","dOut","dIn","dFile","dMerge","dReplace","dClose",
+   "btnLog","verLine","scrimLog","logPrev","logNext","logTitle","logDow","logGrid",
+   "logSum","logDay","logToday","logClose","dDlByDate",
    "btnSync","scrimSync","sStat","sOwner","sRepo","sPath","sBranch","sToken","sTest","sSave","sClear","sClose","sMsg"
   ].forEach(function(k){el[k]=document.getElementById(k);});
 
@@ -428,7 +476,15 @@
   var dropped={};                      // 墓碑：id -> 删除时刻。要留着，否则别处的旧数据会把它复活
   function touched(){ lsSet(K.tasks,tasks); lsSet(K.dropped,dropped); localEditAt=Date.now(); schedulePush(); }
   function pushTask(t){ t.updated=Date.now(); touched(); }
-  function dropTask(id){ dropped[id]=Date.now(); touched(); }
+  function dropTask(id){
+    var t=byId(id);
+    if(t&&((t.log&&t.log.length)||(t.done&&t.doneAt))){      // 有历史就留个壳
+      salvage.push({id:t.id,text:t.text,cat:t.cat,log:(t.log||[]).slice(),
+                    done:!!t.done,doneAt:t.doneAt||0});
+      lsSet(K.salvage,salvage);
+    }
+    dropped[id]=Date.now(); touched();
+  }
   function pushCats(){ catsAt=Date.now(); lsSet(K.cats,cats); localEditAt=catsAt; schedulePush(); }
 
   /* 按任务 id 合并，更新时间新的赢；打卡记录取并集；墓碑比任务新才算删除。 */
@@ -555,8 +611,9 @@
 
   function serialize(){
     pruneDropped();
-    return JSON.stringify({format:FORMAT,v:3,at:catsAt,cats:cats,views:views,tasks:tasks,
-                           deleted:dropped,savedAt:new Date().toISOString()},null,1);
+    return JSON.stringify({format:FORMAT,v:4,at:catsAt,cats:cats,views:views,tasks:tasks,
+                           salvage:salvage,deleted:dropped,
+                           savedAt:new Date().toISOString()},null,1);
   }
   function absorb(d){
     if(!d)return;
@@ -565,6 +622,10 @@
         if(!dropped[k]||dropped[k]<d.deleted[k])dropped[k]=d.deleted[k];
       });
     if(Array.isArray(d.tasks))tasks=mergeTasks(d.tasks);
+    if(Array.isArray(d.salvage)){                      // 按 id 并，不重复
+      var sk={}; salvage.forEach(function(x){sk[x.id]=1;});
+      d.salvage.forEach(function(x){if(x&&x.id&&!sk[x.id])salvage.push(x);});
+    }
     if(Array.isArray(d.cats)&&d.cats.length&&(d.at||0)>catsAt){
       cats=d.cats;
       if(Array.isArray(d.views))views=d.views;
@@ -572,7 +633,8 @@
       if(activeView&&!viewOf(activeView)){activeView=null;lsSet(K.view,null);}
     }
     pruneDropped();
-    lsSet(K.tasks,tasks);lsSet(K.cats,cats);lsSet(K.views,views);lsSet(K.dropped,dropped);
+    lsSet(K.tasks,tasks);lsSet(K.cats,cats);lsSet(K.views,views);
+    lsSet(K.salvage,salvage);lsSet(K.dropped,dropped);
     render();
   }
 
@@ -876,8 +938,10 @@
   el.editDel.addEventListener("click",function(){
     if(!editing)return;
     var id=editing.id;
+    dropTask(id);                      // 先打捞，再移除——顺序反了就捞不到
     tasks=tasks.filter(function(t){return t.id!==id;});
-    expanded.delete(id); dropTask(id); closeEdit(); render();
+    expanded.delete(id); lsSet(K.tasks,tasks);
+    closeEdit(); render();
   });
 
   /* ---------- category manager ---------- */
@@ -955,6 +1019,78 @@
   }
   el.catClose.addEventListener("click",closeCats);
   el.btnMenu.addEventListener("click",function(){armed=null;renderCats();sheetOpen(el.scrimCats);});
+
+  /* ---------- 回顾：把"按任务"的记录转成"按日期" ----------
+     重复待办读 log，一次性待办读 doneAt；删掉的待办从 salvage 里补。 */
+  function dayMap(){
+    var m={};
+    function put(d,t,kind){
+      if(!d)return;
+      (m[d]=m[d]||[]).push({text:t.text,cat:t.cat,kind:kind});
+    }
+    tasks.concat(salvage).forEach(function(t){
+      if(!t||typeof t.text!=="string")return;
+      (t.log||[]).forEach(function(d){put(d,t,"rep");});
+      if(t.done&&t.doneAt)put(ymd(new Date(t.doneAt)),t,"once");
+    });
+    return m;
+  }
+  var logMonth=null,logSel=null;
+  function level(n){return n===0?0:n<=2?1:n<=4?2:n<=6?3:4;}
+  function renderLog(){
+    var m=dayMap(),
+        y=logMonth.getFullYear(),mo=logMonth.getMonth(),
+        first=new Date(y,mo,1),
+        offset=(first.getDay()+6)%7,            // 周一起头
+        days=new Date(y,mo+1,0).getDate(),
+        tStr=today(),h="",active=0,total=0;
+
+    el.logTitle.textContent=y+" 年 "+(mo+1)+" 月";
+    el.logDow.innerHTML=WEEK.map(function(x){return "<i>"+WD[x]+"</i>";}).join("");
+
+    for(var i=0;i<offset;i++)h+='<button class="pad" disabled></button>';
+    for(var d=1;d<=days;d++){
+      var s=y+"-"+String(mo+1).padStart(2,"0")+"-"+String(d).padStart(2,"0"),
+          n=(m[s]||[]).length;
+      if(n){active++;total+=n;}
+      h+='<button class="l'+level(n)+(s===tStr?" now":"")+(s===logSel?" sel":"")+'" data-d="'+s+'">'
+        +d+(n?'<b>'+n+'</b>':'')+'</button>';
+    }
+    el.logGrid.innerHTML=h;
+    el.logSum.innerHTML=active
+      ? "本月 <b>"+active+"</b> 天有记录，共完成 <b>"+total+"</b> 件"
+      : "这个月还没有记录。";
+
+    var list=logSel?(m[logSel]||[]):[];
+    if(!logSel){el.logDay.innerHTML='<div class="hint">点一个日子，看那天做了什么。</div>';return;}
+    var dd=new Date(logSel+"T00:00:00"),
+        head=(dd.getMonth()+1)+" 月 "+dd.getDate()+" 日 周"+WD[dd.getDay()];
+    el.logDay.innerHTML='<div class="lbl" style="margin-bottom:0">'+head+' · '+list.length+' 件</div>'
+      +(list.length
+        ? '<div class="dlist">'+list.map(function(x){
+            var c=catOf(x.cat);
+            return '<div class="di"><span class="dot" style="background:'+(c?c.color:"var(--border2)")+'"></span>'
+              +'<span>'+esc(x.text)+'</span>'
+              +'<span class="kind">'+(x.kind==="rep"?"例行":"完成")+'</span></div>';
+          }).join("")+'</div>'
+        : '<div class="hint">这天没有记录。</div>');
+  }
+  el.logGrid.addEventListener("click",function(e){
+    var b=e.target.closest("[data-d]"); if(!b)return;
+    var d=b.getAttribute("data-d");
+    logSel=(logSel===d)?null:d;
+    renderLog();
+  });
+  el.logPrev.addEventListener("click",function(){logMonth=new Date(logMonth.getFullYear(),logMonth.getMonth()-1,1);renderLog();});
+  el.logNext.addEventListener("click",function(){logMonth=new Date(logMonth.getFullYear(),logMonth.getMonth()+1,1);renderLog();});
+  el.logToday.addEventListener("click",function(){var n=new Date();logMonth=new Date(n.getFullYear(),n.getMonth(),1);logSel=today();renderLog();});
+  el.btnLog.addEventListener("click",function(){
+    var n=new Date();
+    if(!logMonth)logMonth=new Date(n.getFullYear(),n.getMonth(),1);
+    if(!logSel)logSel=today();
+    renderLog(); sheetOpen(el.scrimLog);
+  });
+  el.logClose.addEventListener("click",function(){sheetShut(el.scrimLog);});
 
   /* ---------- 栏目 ---------- */
   function pushViews(){
@@ -1105,8 +1241,9 @@
   /* ---------- backup ---------- */
   var FORMAT="suishou-todo-1";
   function snapshotJSON(){
-    return JSON.stringify({format:FORMAT,v:3,exportedAt:new Date().toISOString(),
-                           at:catsAt,cats:cats,views:views,tasks:tasks,deleted:dropped},null,1);
+    return JSON.stringify({format:FORMAT,v:4,exportedAt:new Date().toISOString(),
+                           at:catsAt,cats:cats,views:views,tasks:tasks,
+                           salvage:salvage,deleted:dropped},null,1);
   }
   function logText(){
     var reps=tasks.filter(isRep);
@@ -1148,6 +1285,27 @@
       toast("已下载 "+name);
     }catch(e){ el.dOut.value=text; toast("下载被拦，内容已放到下面"); }
   }
+  function byDateText(){
+    var m=dayMap(),keys=Object.keys(m).sort();
+    if(!keys.length)return "（还没有任何完成记录）";
+    var out=["# 按日期的完成记录","","导出于 "+new Date().toISOString().slice(0,10),""],
+        total=0;
+    keys.forEach(function(d){
+      var dd=new Date(d+"T00:00:00"),l=m[d];
+      total+=l.length;
+      out.push("## "+d+"（周"+WD[dd.getDay()]+"） · "+l.length+" 件");
+      l.forEach(function(x){
+        var c=catOf(x.cat);
+        out.push("- "+x.text+"　["+(c?c.name:"未分类")+" / "+(x.kind==="rep"?"例行":"完成")+"]");
+      });
+      out.push("");
+    });
+    out.splice(3,0,"共 "+keys.length+" 天，"+total+" 件","");
+    return out.join("\n");
+  }
+  el.dDlByDate.addEventListener("click",function(){
+    download(byDateText(),"todo-bydate-"+today()+".md","text/markdown");
+  });
   el.dDlJson.addEventListener("click",function(){
     download(snapshotJSON(),"todo-backup-"+today()+".json","application/json");
   });
@@ -1303,7 +1461,7 @@
   el.btnAdd.addEventListener("click",function(){addTask(el.newTxt.value);el.newTxt.value="";});
   el.newTxt.addEventListener("keydown",function(e){if(e.key==="Enter"){addTask(el.newTxt.value);el.newTxt.value="";}});
 
-  [el.scrimEdit,el.scrimCats,el.scrimPick,el.scrimData,el.scrimSync,el.scrimViews].forEach(function(s){
+  [el.scrimEdit,el.scrimCats,el.scrimPick,el.scrimData,el.scrimSync,el.scrimViews,el.scrimLog].forEach(function(s){
     s.addEventListener("click",function(e){
       if(e.target!==s)return;
       if(s===el.scrimCats){closeCats();return;}
@@ -1325,11 +1483,13 @@
   var lf=lsGet(K.filter,null); if(lf&&lf.length)filter=new Set(lf);
   dropped=lsGet(K.dropped,{})||{};
   views=lsGet(K.views,[])||[];
+  salvage=lsGet(K.salvage,[])||[];
   activeView=lsGet(K.view,null);
   if(activeView&&!viewOf(activeView))activeView=null;
   showDone=!!lsGet(K.showDone,false);
   showOff=!!lsGet(K.showOff,false);
   ghLoad();
+  el.verLine.textContent="v"+VERSION;
   render(); renderSyncNote();
 
   if(ghOn())ghPull();
