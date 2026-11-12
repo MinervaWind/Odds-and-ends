@@ -21,15 +21,17 @@
 打开网址就能用，什么都不用配。数据存在浏览器本地。手机上建议**添加到主屏幕**。
 代价是换设备就看不到，清浏览器缓存就没了。所以如果你打算长期用，建议接上同步。
 #### 接同步（可选）
-**1. 建一个私有仓库**
+1. 建一个私有仓库
 名字随便，比如 `todo-data`。**务必勾 Private。** 里面不用放任何东西，数据文件会自动创建。
-**2. 生成 token**
+
+3. 生成 token
 GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token
 - Repository access：**Only select repositories**，只选上一步那个仓库
 - Permissions → Repository permissions → **Contents: Read and write**（只给这一项，Metadata 是强制带的，去不掉）
 - Expiration：别选最长，三个月左右比较合适
 生成后那串 `github_pat_...` **只显示一次**，先存下来。
-**3. 填进工具**
+
+3. 填进工具
 页面底部「同步设置」，填 owner（你的用户名）、repo（仓库名，区分大小写）、token。先点**测试连接**，再点**保存并同步**。
 其他设备重复第 3 步就行，token 是同一串。
 接上之后：改动攒 5 秒自动提交，切到后台或关页面时立刻提交。两台设备同时改会自动合并，不是简单覆盖。
