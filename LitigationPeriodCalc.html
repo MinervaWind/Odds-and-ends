@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>诉讼期间计算器 v1.1.0</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;background:#f2f4f7;color:#1f2937;font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%}
+.wrap{max-width:640px;margin:0 auto;padding:16px 14px 48px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{margin:0 0 16px;color:#6b7280;font-size:13px}
+.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.field{margin-bottom:16px}
+.field:last-child{margin-bottom:0}
+label{display:block;font-size:14px;font-weight:600;margin-bottom:8px;color:#374151}
+input[type=date],input[type=number],select,textarea{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:#fff;color:#111827;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.hint{font-size:12px;color:#9ca3af;margin-top:6px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips button{flex:1;min-width:60px;padding:11px 6px;border:1px solid #d1d5db;background:#fff;border-radius:10px;font-size:15px;color:#374151;cursor:pointer;font-family:inherit}
+.chips button.active{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:600}
+.custom{display:flex;gap:8px;margin-top:10px}
+.custom input{flex:1}
+.custom select{width:110px;flex:none}
+.banner{padding:12px 14px;border-radius:10px;font-weight:600;font-size:15px;margin-bottom:16px}
+.banner.ok{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0}
+.banner.bad{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}
+.banner.warn{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+.banner.none{background:#f3f4f6;color:#4b5563;border:1px solid #e5e7eb}
+.dl{text-align:center;padding:8px 0 16px;border-bottom:1px dashed #e5e7eb;margin-bottom:14px}
+.dl-label{font-size:13px;color:#6b7280;margin-bottom:4px}
+.big{font-size:28px;font-weight:700;letter-spacing:.5px;color:#111827}
+.dl-week{font-size:14px;color:#6b7280;margin-top:2px}
+.rows{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;font-size:14px;margin:0}
+.rows dt{color:#6b7280;white-space:nowrap}
+.rows dd{margin:0;text-align:right;font-weight:500;word-break:break-all}
+.rows dd .tag{display:inline-block;font-size:12px;padding:1px 6px;border-radius:5px;background:#f3f4f6;color:#6b7280;margin-left:4px;vertical-align:1px}
+.reset{width:100%;padding:14px;border:1px solid #d1d5db;background:#fff;border-radius:12px;font-size:16px;color:#374151;cursor:pointer;font-family:inherit;margin-bottom:14px}
+.reset:active{background:#f3f4f6}
+details summary{cursor:pointer;font-weight:600;font-size:15px;color:#374151;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary::after{content:"▾";float:right;color:#9ca3af}
+details[open] summary::after{content:"▴"}
+.detail-body{margin-top:14px;font-size:14px;color:#4b5563}
+.detail-body p{margin:0 0 12px}
+.detail-body ol{margin:0 0 12px;padding-left:20px}
+.detail-body li{margin-bottom:6px}
+.detail-body textarea{font-size:14px;font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.5;margin-bottom:14px}
+.row-btns{display:flex;gap:8px}
+.row-btns button{flex:1;padding:11px;border-radius:10px;border:1px solid #2563eb;background:#2563eb;color:#fff;font-size:15px;cursor:pointer;font-family:inherit}
+.row-btns button.ghost{background:#fff;color:#374151;border-color:#d1d5db}
+.tip{font-size:13px;color:#6b7280}
+.year-warn{background:#fffbeb;border:1px solid #fde68a;color:#b45309;padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:14px}
+.foot{text-align:center;font-size:12px;color:#9ca3af;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>诉讼期间计算器</h1>
+  <p class="sub">次日起算 · 末日遇周六日/法定节假日顺延至工作日 · v1.1.0</p>
+
+  <div id="yearWarn" class="year-warn" hidden></div>
+
+  <section class="card">
+    <div class="field">
+      <label for="dateA">文书发出日（A）</label>
+      <input type="date" id="dateA">
+    </div>
+    <div class="field">
+      <label for="dateB">当事人提交日（B）</label>
+      <input type="date" id="dateB">
+      <div class="hint">可留空，仅计算届满日</div>
+    </div>
+    <div class="field">
+      <label>期间</label>
+      <div class="chips" id="chips">
+        <button type="button" data-days="10">10 日</button>
+        <button type="button" data-days="15" class="active">15 日</button>
+        <button type="button" data-days="30">30 日</button>
+        <button type="button" data-custom="1">自定义</button>
+      </div>
+      <div class="custom" id="customBox" hidden>
+        <input type="number" id="numVal" min="1" step="1" value="15" inputmode="numeric">
+        <select id="unitVal">
+          <option value="day">日</option>
+          <option value="month">个月</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section id="result"></section>
+
+  <button type="button" id="resetBtn" class="reset">一键复位</button>
+
+  <details class="card">
+    <summary>计算规则说明</summary>
+    <div class="detail-body">
+      <ol>
+        <li><b>起算</b>：文书发出日（A）当日不计入，自次日起算（《民法典》第 201 条）。</li>
+        <li><b>主口径届满日</b>：按日 = A + N 天；按月 = A 的对应日，无对应日取当月最后一日。</li>
+        <li><b>宽松口径届满日</b>：从次日起完整数 N 天，即主口径名义届满日再加 1 天（A + N + 1），单独顺延。</li>
+        <li><b>顺延</b>：届满日为周六、周日或法定节假日时，顺延至其后第一个工作日，可连锁顺延；调休上班的周六日视为工作日。</li>
+        <li><b>判定</b>：B ≤ C 未超期；B = C 提示人工复核；主口径已超期但未超过宽松口径时提示可能超期、人工复核；超过宽松口径为超期；B &lt; A 提示日期可能有误。</li>
+      </ol>
+      <p class="tip">本工具结果仅供参考，最终以法律规定及案件实际情况为准。</p>
+    </div>
+  </details>
+
+  <details class="card" id="dataPanel">
+    <summary>节假日数据与补录</summary>
+    <div class="detail-body">
+      <p class="tip">已内置 2023–2027 年国务院放假安排及调休上班日。其他年份请在此补录（保存在本机浏览器，不上传）。</p>
+      <label for="holidayText">法定节假日（每行：日期 空格 名称）</label>
+      <textarea id="holidayText" rows="6" spellcheck="false" placeholder="2028-01-01 元旦&#10;2028-02-16 春节"></textarea>
+      <label for="workdayText">调休上班日（每行一个日期）</label>
+      <textarea id="workdayText" rows="4" spellcheck="false" placeholder="2028-02-12&#10;2028-02-26"></textarea>
+      <div class="row-btns">
+        <button type="button" id="saveData">保存补录</button>
+        <button type="button" id="restoreData" class="ghost">恢复内置</button>
+      </div>
+      <p class="tip" id="saveMsg"></p>
+    </div>
+  </details>
+
+  <p class="foot">数据本地保存，不上传任何服务器 · v1.1.0</p>
+</div>
+
+<script>
+/* ================= 内置节假日数据（v1.1.0，2023–2027） ================= */
+const BUILTIN_HOLIDAYS = {
+  "2022-12-31":"元旦","2023-01-01":"元旦","2023-01-02":"元旦",
+  "2023-01-21":"春节","2023-01-22":"春节","2023-01-23":"春节","2023-01-24":"春节",
+  "2023-01-25":"春节","2023-01-26":"春节","2023-01-27":"春节",
+  "2023-04-05":"清明节",
+  "2023-04-29":"劳动节","2023-04-30":"劳动节","2023-05-01":"劳动节","2023-05-02":"劳动节","2023-05-03":"劳动节",
+  "2023-06-22":"端午节","2023-06-23":"端午节","2023-06-24":"端午节",
+  "2023-09-29":"中秋节","2023-09-30":"国庆节","2023-10-01":"国庆节","2023-10-02":"国庆节",
+  "2023-10-03":"国庆节","2023-10-04":"国庆节","2023-10-05":"国庆节","2023-10-06":"国庆节",
+
+  "2024-01-01":"元旦",
+  "2024-02-10":"春节","2024-02-11":"春节","2024-02-12":"春节","2024-02-13":"春节",
+  "2024-02-14":"春节","2024-02-15":"春节","2024-02-16":"春节","2024-02-17":"春节",
+  "2024-04-04":"清明节","2024-04-05":"清明节","2024-04-06":"清明节",
+  "2024-05-01":"劳动节","2024-05-02":"劳动节","2024-05-03":"劳动节","2024-05-04":"劳动节","2024-05-05":"劳动节",
+  "2024-06-08":"端午节","2024-06-09":"端午节","2024-06-10":"端午节",
+  "2024-09-15":"中秋节","2024-09-16":"中秋节","2024-09-17":"中秋节",
+  "2024-10-01":"国庆节","2024-10-02":"国庆节","2024-10-03":"国庆节","2024-10-04":"国庆节",
+  "2024-10-05":"国庆节","2024-10-06":"国庆节","2024-10-07":"国庆节",
+
+  "2025-01-01":"元旦",
+  "2025-01-28":"春节","2025-01-29":"春节","2025-01-30":"春节","2025-01-31":"春节",
+  "2025-02-01":"春节","2025-02-02":"春节","2025-02-03":"春节","2025-02-04":"春节",
+  "2025-04-04":"清明节","2025-04-05":"清明节","2025-04-06":"清明节",
+  "2025-05-01":"劳动节","2025-05-02":"劳动节","2025-05-03":"劳动节","2025-05-04":"劳动节","2025-05-05":"劳动节",
+  "2025-05-31":"端午节","2025-06-01":"端午节","2025-06-02":"端午节",
+  "2025-10-01":"国庆节","2025-10-02":"国庆节","2025-10-03":"国庆节","2025-10-04":"国庆节",
+  "2025-10-05":"国庆节","2025-10-06":"国庆节","2025-10-07":"国庆节","2025-10-08":"国庆节",
+
+  "2026-01-01":"元旦","2026-01-02":"元旦","2026-01-03":"元旦",
+  "2026-02-15":"春节","2026-02-16":"春节","2026-02-17":"春节","2026-02-18":"春节",
+  "2026-02-19":"春节","2026-02-20":"春节","2026-02-21":"春节","2026-02-22":"春节",
+  "2026-02-23":"春节",
+  "2026-04-04":"清明节","2026-04-05":"清明节","2026-04-06":"清明节",
+  "2026-05-01":"劳动节","2026-05-02":"劳动节","2026-05-03":"劳动节","2026-05-04":"劳动节","2026-05-05":"劳动节",
+  "2026-06-19":"端午节","2026-06-20":"端午节","2026-06-21":"端午节",
+  "2026-09-25":"中秋节","2026-09-26":"中秋节","2026-09-27":"中秋节",
+  "2026-10-01":"国庆节","2026-10-02":"国庆节","2026-10-03":"国庆节","2026-10-04":"国庆节",
+  "2026-10-05":"国庆节","2026-10-06":"国庆节","2026-10-07":"国庆节",
+
+  "2027-01-01":"元旦","2027-01-02":"元旦","2027-01-03":"元旦",
+  "2027-02-05":"春节","2027-02-06":"春节","2027-02-07":"春节","2027-02-08":"春节",
+  "2027-02-09":"春节","2027-02-10":"春节","2027-02-11":"春节","2027-02-12":"春节",
+  "2027-02-13":"春节",
+  "2027-04-03":"清明节","2027-04-04":"清明节","2027-04-05":"清明节",
+  "2027-05-01":"劳动节","2027-05-02":"劳动节","2027-05-03":"劳动节","2027-05-04":"劳动节","2027-05-05":"劳动节",
+  "2027-06-09":"端午节",
+  "2027-09-15":"中秋节",
+  "2027-10-01":"国庆节","2027-10-02":"国庆节","2027-10-03":"国庆节","2027-10-04":"国庆节",
+  "2027-10-05":"国庆节","2027-10-06":"国庆节","2027-10-07":"国庆节"
+};
+
+const BUILTIN_WORKDAYS = [
+  "2023-01-28","2023-01-29","2023-04-23","2023-05-06","2023-06-25","2023-10-07","2023-10-08",
+  "2024-02-04","2024-02-18","2024-04-07","2024-04-28","2024-05-11","2024-09-14","2024-09-29","2024-10-12",
+  "2025-01-26","2025-02-08","2025-04-27","2025-09-28","2025-10-11",
+  "2026-01-04","2026-02-14","2026-02-28","2026-05-09","2026-09-20","2026-10-10",
+  "2027-01-31","2027-02-14","2027-05-08","2027-09-26","2027-10-09"
+];
+
+/* ================= 工具函数 ================= */
+const $ = s => document.querySelector(s);
+const WEEK = ['周日','周一','周二','周三','周四','周五','周六'];
+const STORE_KEY = 'litigation-period-calc-v1';
+
+function parseDate(str){
+  if(!str) return null;
+  const p = str.split('-').map(Number);
+  const d = new Date(p[0], p[1]-1, p[2]);
+  if(d.getFullYear()!==p[0] || d.getMonth()!==p[1]-1 || d.getDate()!==p[2]) return null;
+  return d;
+}
+function fmt(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function diffDays(a,b){ return Math.round((new Date(b.getFullYear(),b.getMonth(),b.getDate()) - new Date(a.getFullYear(),a.getMonth(),a.getDate()))/86400000); }
+function addMonths(d,m){
+  const y=d.getFullYear(), mo=d.getMonth(), day=d.getDate();
+  const t=new Date(y, mo+m, 1);
+  const last=new Date(t.getFullYear(), t.getMonth()+1, 0).getDate();
+  t.setDate(Math.min(day,last));
+  return t;
+}
+function weekName(d){ return WEEK[d.getDay()]; }
+
+/* ================= 数据索引 ================= */
+let holidayMap = {};
+let workdaySet = new Set();
+let coveredYears = new Set();
+
+function buildIndex(data){
+  holidayMap = {};
+  workdaySet = new Set();
+  coveredYears = new Set();
+  Object.keys(data.holidays||{}).forEach(k=>{ holidayMap[k]=data.holidays[k]||'节假日'; coveredYears.add(+k.slice(0,4)); });
+  (data.workdays||[]).forEach(k=>{ if(/^\d{4}-\d{2}-\d{2}$/.test(k)){ workdaySet.add(k); coveredYears.add(+k.slice(0,4)); } });
+}
+function loadData(){
+  let data = null;
+  try{ data = JSON.parse(localStorage.getItem(STORE_KEY)||'null'); }catch(e){ data=null; }
+  if(!data) data = {holidays:BUILTIN_HOLIDAYS, workdays:BUILTIN_WORKDAYS};
+  buildIndex(data);
+}
+function currentData(){
+  const holidays = {};
+  Object.keys(holidayMap).forEach(k=>holidays[k]=holidayMap[k]);
+  return {holidays, workdays:Array.from(workdaySet).sort()};
+}
+
+/* ================= 休息日与顺延 ================= */
+function isRestDay(d){
+  const s = fmt(d);
+  if(workdaySet.has(s)) return false;
+  if(holidayMap[s]) return true;
+  const w = d.getDay();
+  return w===0 || w===6;
+}
+function reasonOf(d){
+  const s = fmt(d);
+  if(holidayMap[s]) return holidayMap[s];
+  return d.getDay()===0 ? '周日' : (d.getDay()===6 ? '周六' : '休息日');
+}
+function postpone(nominal){
+  let d = new Date(nominal);
+  const skipped = [];
+  while(isRestDay(d) && skipped.length < 60){
+    skipped.push({date:fmt(d), reason:reasonOf(d)});
+    d = addDays(d,1);
+  }
+  return {date:d, skipped};
+}
+
+/* ================= 计算 ================= */
+let preset = {type:'days', days:15, num:15, unit:'day'};
+
+function compute(){
+  const A = parseDate($('#dateA').value);
+  if(!A){ render(null); $('#yearWarn').hidden = true; return; }
+  const B = parseDate($('#dateB').value);
+
+  const p = preset;
+  let nominal, periodLabel;
+  if(p.unit === 'day'){
+    nominal = addDays(A, p.num);
+    periodLabel = p.num + ' 日';
+  }else{
+    nominal = addMonths(A, p.num);
+    periodLabel = p.num + ' 个月';
+  }
+  // 宽松口径：从次日起完整数 N 天，名义届满日 = 主口径 + 1
+  const nominalAlt = addDays(nominal, 1);
+  const post = postpone(nominal);
+  const postAlt = postpone(nominalAlt);
+  const C = post.date;
+  const Calt = postAlt.date;
+
+  let verdict;
+  if(!B){
+    verdict = {type:'none', text:'未填写提交日，仅显示届满日'};
+  }else if(B < A){
+    verdict = {type:'warn', text:'日期可能有误，请人工复核（提交日早于文书发出日）'};
+  }else if(+B === +C){
+    verdict = {type:'warn', text:'提交日恰为最后一日，可能超期，请人工复核'};
+  }else if(B < C){
+    verdict = {type:'ok', text:'未超期，距最后一日还有 '+diffDays(B, C)+' 天'};
+  }else if(B <= Calt){
+    verdict = {type:'warn', text:'主口径已超期（超 '+diffDays(C, B)+' 天）、宽松口径未超期，可能超期，请人工复核'};
+  }else{
+    verdict = {type:'bad', text:'已超期 '+diffDays(Calt, B)+' 天（按宽松口径计）'};
+  }
+
+  render({A, B, nominal, post, C, Calt, periodLabel, verdict});
+
+  const warnEl = $('#yearWarn');
+  const years = new Set([A.getFullYear(), C.getFullYear(), Calt.getFullYear()]);
+  const missing = [];
+  years.forEach(y=>{ if(!coveredYears.has(y)) missing.push(y); });
+  if(missing.length){
+    warnEl.hidden = false;
+    warnEl.innerHTML = '⚠️ ' + missing.join('、') + ' 年节假日数据未录入，顺延仅按周末计算，请先补录或人工复核。';
+  }else{
+    warnEl.hidden = true;
+  }
+}
+
+function render(r){
+  const el = $('#result');
+  if(!r){ el.innerHTML=''; return; }
+
+  const {A, B, nominal, post, C, Calt, periodLabel, verdict} = r;
+
+  let postponeText, postponeTag='';
+  if(post.skipped.length === 0){
+    postponeText = '无需顺延（工作日）';
+  }else{
+    postponeText = '顺延 ' + post.skipped.length + ' 天 → ' + fmt(C) + '（' + weekName(C) + '）';
+    postponeTag = '<span class="tag">' + reasonOf(nominal) + '</span>';
+  }
+
+  const bRow = B ? '<dt>提交日（B）</dt><dd>' + fmt(B) + '（' + weekName(B) + '）</dd>' : '';
+  const bGap = B ? '<dt>A→B 经过</dt><dd>' + diffDays(A, B) + ' 天</dd>' : '';
+
+  el.innerHTML =
+    '<section class="card">' +
+      '<div class="banner ' + verdict.type + '">' + verdict.text + '</div>' +
+      '<div class="dl">' +
+        '<div class="dl-label">实际届满日（C）</div>' +
+        '<div class="big">' + fmt(C) + '</div>' +
+        '<div class="dl-week">' + weekName(C) + '</div>' +
+      '</div>' +
+      '<dl class="rows">' +
+        '<dt>文书发出日（A）</dt><dd>' + fmt(A) + '（' + weekName(A) + '）</dd>' +
+        bRow +
+        '<dt>期间</dt><dd>' + periodLabel + '</dd>' +
+        bGap +
+        '<dt>名义届满日</dt><dd>' + fmt(nominal) + '（' + weekName(nominal) + '）' + postponeTag + '</dd>' +
+        '<dt>顺延情况</dt><dd>' + postponeText + '</dd>' +
+        '<dt>宽松口径届满日</dt><dd>' + fmt(Calt) + '（' + weekName(Calt) + '）</dd>' +
+      '</dl>' +
+    '</section>';
+}
+
+/* ================= 事件绑定 ================= */
+function updateChips(){
+  document.querySelectorAll('#chips button').forEach(btn=>{
+    if(btn.dataset.days !== undefined){
+      btn.classList.toggle('active', preset.type==='days' && +btn.dataset.days === preset.days);
+    }else{
+      btn.classList.toggle('active', preset.type==='custom');
+    }
+  });
+  const box = $('#customBox');
+  if(preset.type === 'custom'){
+    box.hidden = false;
+    $('#numVal').value = preset.num;
+    $('#unitVal').value = preset.unit;
+  }else{
+    box.hidden = true;
+  }
+}
+
+document.getElementById('chips').addEventListener('click', e=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  if(btn.dataset.days !== undefined){
+    preset = {type:'days', days:+btn.dataset.days, num:+btn.dataset.days, unit:'day'};
+  }else{
+    const num = Math.max(1, parseInt($('#numVal').value,10) || 15);
+    preset = {type:'custom', num:num, unit:$('#unitVal').value};
+  }
+  updateChips();
+  compute();
+});
+
+$('#customBox').addEventListener('input', ()=>{
+  if(preset.type !== 'custom') return;
+  preset.num = Math.max(1, parseInt($('#numVal').value,10) || 1);
+  preset.unit = $('#unitVal').value;
+  compute();
+});
+
+$('#dateA').addEventListener('input', compute);
+$('#dateB').addEventListener('input', compute);
+
+$('#resetBtn').addEventListener('click', ()=>{
+  $('#dateA').value = '';
+  $('#dateB').value = '';
+  preset = {type:'days', days:15, num:15, unit:'day'};
+  updateChips();
+  render(null);
+  $('#yearWarn').hidden = true;
+});
+
+/* ================= 节假日数据面板 ================= */
+function fillTextareas(){
+  const data = currentData();
+  const hLines = Object.keys(data.holidays).sort().map(k=>k + ' ' + data.holidays[k]);
+  $('#holidayText').value = hLines.join('\n');
+  $('#workdayText').value = data.workdays.join('\n');
+}
+
+function parseHolidayText(text){
+  const map = {};
+  text.split('\n').forEach(line=>{
+    line = line.trim();
+    if(!line || line.startsWith('#')) return;
+    const m = line.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/);
+    if(m) map[m[1]] = m[2].trim() || '节假日';
+  });
+  return map;
+}
+function parseWorkdayText(text){
+  const arr = [];
+  text.split('\n').forEach(line=>{
+    line = line.trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(line)) arr.push(line);
+  });
+  return arr;
+}
+
+$('#saveData').addEventListener('click', ()=>{
+  const holidays = parseHolidayText($('#holidayText').value);
+  const workdays = parseWorkdayText($('#workdayText').value);
+  localStorage.setItem(STORE_KEY, JSON.stringify({holidays, workdays}));
+  buildIndex({holidays, workdays});
+  $('#saveMsg').textContent = '已保存，共 ' + Object.keys(holidays).length + ' 个节假日、' + workdays.length + ' 个调休上班日。';
+  compute();
+});
+
+$('#restoreData').addEventListener('click', ()=>{
+  if(!confirm('恢复为内置数据？你补录的内容将被清除。')) return;
+  localStorage.removeItem(STORE_KEY);
+  buildIndex({holidays:BUILTIN_HOLIDAYS, workdays:BUILTIN_WORKDAYS});
+  fillTextareas();
+  $('#saveMsg').textContent = '已恢复内置数据（v1.1.0，2023–2027）。';
+  compute();
+});
+
+/* ================= 初始化 ================= */
+loadData();
+fillTextareas();
+updateChips();
+</script>
+</body>
+</html>
