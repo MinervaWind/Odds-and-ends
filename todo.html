@@ -569,6 +569,12 @@
       <button class="chip" data-cal="lunar">农历</button>
     </div>
     <div class="hint" id="annivUpHint"></div>
+    <label class="check" style="margin-top:12px"><input type="checkbox" id="annivUpEnded">已结束</label>
+    <div id="annivUpEndWrap" style="display:none">
+      <div class="lbl">结束日期</div>
+      <input type="date" id="annivUpEndDate">
+      <div class="hint">打开后不再往上累计，固定显示从起始日到这天一共经过了多少天。</div>
+    </div>
   </div>
 
   <!-- 倒数日 -->
@@ -613,15 +619,15 @@
 (function(){
   "use strict";
 
-  var VERSION="1.4.0";
+  var VERSION="1.4.1";
 
   var DEFAULT_CATS=[
-    {id:"hw",     name:"学习", color:"#e0674f"},
-    {id:"ddl",    name:"工作", color:"#d94f6a"},
-    {id:"intern", name:"灵感", color:"#4f93d9"},
-    {id:"proj",   name:"健康", color:"#b57fd9"},
-    {id:"social", name:"社交", color:"#4fb59b"},
-    {id:"idea",   name:"生活", color:"#d9b44f"}
+    {id:"type_01", name:"学习", color:"#e0674f"},
+    {id:"type_02", name:"工作", color:"#d94f6a"},
+    {id:"type_03", name:"灵感", color:"#4f93d9"},
+    {id:"type_04", name:"健康", color:"#b57fd9"},
+    {id:"type_05", name:"社交", color:"#4fb59b"},
+    {id:"type_06", name:"生活", color:"#d9b44f"}
   ];
   var PALETTE=["#e0674f","#d94f6a","#c8518f","#b57fd9","#8f9bd9","#4f93d9",
                "#4fb5b5","#4fb59b","#6fb54f","#b0b54f","#d9b44f","#d98f4f"];
@@ -669,6 +675,7 @@
    "annivWrap","annivHome","btnAnniv","scrimAnniv","annivList","annivAddBirthday","annivAddUp","annivAddDown","annivClose",
    "scrimAnnivEdit","annivEditTitle","annivTitle","annivBirthFields","annivMonth","annivDay","annivYear","annivCalBirth","annivBirthHint",
    "annivUpFields","annivUpSolarWrap","annivUpDate","annivUpLunarWrap","annivUpLY","annivUpLM","annivUpLD","annivCalUp","annivUpHint",
+   "annivUpEnded","annivUpEndWrap","annivUpEndDate",
    "annivDownFields","annivDownDate","annivShow","annivDel","annivCancel","annivSave",
    "btnDisplay","scrimDisplay","dispTitle","dispTheme","dispClose"
   ].forEach(function(k){el[k]=document.getElementById(k);});
@@ -919,10 +926,17 @@
     }
     if(a.type==="countup"){
       var st2=parseYmd(a.date);
-      var diff=diffDays(new Date(),st2);
       var sub2=[];
       if(a.calendar==="lunar"&&a.lYear)sub2.push(lunarText(a.lMonth,a.lDay,false));
       sub2.push(a.date);
+      if(a.endDate){
+        var en=parseYmd(a.endDate);
+        var span=diffDays(en,st2);
+        sub2.push("已结束 · 至 "+a.endDate);
+        return {days:span+1,isToday:false,expired:false,muted:true,
+                sub:sub2.join(" · "),num:"共 <b>"+(span+1)+"</b> 天"};
+      }
+      var diff=diffDays(new Date(),st2);
       if(diff<0){
         return {days:diff,isToday:false,expired:false,muted:true,
                 sub:sub2.join(" · "),num:"<b>"+(-diff)+"</b> 天后开始"};
@@ -1052,7 +1066,10 @@
       var order={birthday:0,countdown:1,countup:2};
       var o1=order[x.type]||0,o2=order[y.type]||0;
       if(o1!==o2)return o1-o2;
-      return (y.created||0)-(x.created||0);
+      var ix=annivInfo(x),iy=annivInfo(y);
+      var dx=(ix&&ix.days!=null)?ix.days:0,dy=(iy&&iy.days!=null)?iy.days:0;
+      if(x.type==="countup")return dy-dx; // 正数日：已经过去的天数越多排越前，跟主页一致
+      return dx-dy; // 生日/倒数日：还有几天越少排越前
     });
     el.annivList.innerHTML=sorted.map(annivRowHTML).join("");
   }
@@ -1123,16 +1140,34 @@
   var editingAnniv=null,editAnnivType="birthday",editCalBirth="solar",editCalUp="solar";
   var editingIsNew=false;
 
+  function solarMonthDays(m){
+    if(m===2)return 29; // 不绑定具体年份：留出闰年29号的可能性，真实年份换算时会再校验是否存在
+    return [4,6,9,11].indexOf(m)>=0?30:31;
+  }
+  function fillDaySelect(sel,n,keep){
+    var da='<option value="">日</option>';
+    for(var j=1;j<=n;j++)da+='<option value="'+j+'">'+j+'</option>';
+    sel.innerHTML=da;
+    if(keep&&keep<=n)sel.value=String(keep);
+  }
   function fillMonthDaySelects(){
     var mo='<option value="">月</option>';
     for(var i=1;i<=12;i++)mo+='<option value="'+i+'">'+i+'</option>';
-    var da='<option value="">日</option>';
-    for(var j=1;j<=30;j++)da+='<option value="'+j+'">'+j+'</option>';
     el.annivMonth.innerHTML=mo;
-    el.annivDay.innerHTML=da;
     el.annivUpLM.innerHTML=mo;
-    el.annivUpLD.innerHTML=da;
+    fillDaySelect(el.annivDay,31);
+    fillDaySelect(el.annivUpLD,30);
   }
+  el.annivMonth.addEventListener("change",function(){
+    var keep=el.annivDay.value?parseInt(el.annivDay.value,10):null;
+    var n=editCalBirth==="lunar"?30:solarMonthDays(parseInt(el.annivMonth.value,10)||0);
+    if(!el.annivMonth.value)n=31;
+    fillDaySelect(el.annivDay,n,keep);
+  });
+  el.annivUpLM.addEventListener("change",function(){
+    var keep=el.annivUpLD.value?parseInt(el.annivUpLD.value,10):null;
+    fillDaySelect(el.annivUpLD,30,keep); // 正数日的月日选择只在农历模式下使用，固定30天封顶
+  });
   function setCalChips(box,val){
     Array.prototype.forEach.call(box.querySelectorAll("[data-cal]"),function(b){
       b.classList.toggle("on",b.getAttribute("data-cal")===val);
@@ -1183,6 +1218,9 @@
           var p=String(a.date||"").split("-");
           el.annivUpLY.value=p[0]||""; el.annivUpLM.value=String(parseInt(p[1],10)||""); el.annivUpLD.value=String(parseInt(p[2],10)||"");
         }
+        el.annivUpEnded.checked=!!a.endDate;
+        el.annivUpEndDate.value=a.endDate||"";
+        el.annivUpEndWrap.style.display=a.endDate?"":"none";
       }else{
         el.annivDownDate.value=a.date||"";
       }
@@ -1197,6 +1235,7 @@
       editCalUp="solar"; setCalChips(el.annivCalUp,"solar");
       el.annivMonth.value=""; el.annivDay.value=""; el.annivYear.value="";
       el.annivUpDate.value=""; el.annivUpLY.value=""; el.annivUpLM.value=""; el.annivUpLD.value="";
+      el.annivUpEnded.checked=false; el.annivUpEndDate.value=""; el.annivUpEndWrap.style.display="none";
       el.annivDownDate.value="";
       el.annivShow.checked=true;
       el.annivDel.style.display="none";
@@ -1210,10 +1249,16 @@
   el.annivCalBirth.addEventListener("click",function(e){
     var b=e.target.closest("[data-cal]"); if(!b)return;
     editCalBirth=b.getAttribute("data-cal"); setCalChips(el.annivCalBirth,editCalBirth); updateAnnivHints();
+    var keep=el.annivDay.value?parseInt(el.annivDay.value,10):null;
+    var n=editCalBirth==="lunar"?30:(el.annivMonth.value?solarMonthDays(parseInt(el.annivMonth.value,10)):31);
+    fillDaySelect(el.annivDay,n,keep);
   });
   el.annivCalUp.addEventListener("click",function(e){
     var b=e.target.closest("[data-cal]"); if(!b)return;
     editCalUp=b.getAttribute("data-cal"); setCalChips(el.annivCalUp,editCalUp); syncCalUi();
+  });
+  el.annivUpEnded.addEventListener("change",function(){
+    el.annivUpEndWrap.style.display=el.annivUpEnded.checked?"":"none";
   });
   el.annivCancel.addEventListener("click",function(){editingAnniv=null;sheetShut(el.scrimAnnivEdit);});
   el.annivDel.addEventListener("click",function(){
@@ -1258,6 +1303,14 @@
         if(!v){toast("选个起始日期");return;}
         rec.date=v;
         delete rec.lYear; delete rec.lMonth; delete rec.lDay;
+      }
+      if(el.annivUpEnded.checked){
+        var ed=el.annivUpEndDate.value;
+        if(!ed){toast("选个结束日期");return;}
+        if(parseYmd(ed)<parseYmd(rec.date)){toast("结束日期不能早于起始日期");return;}
+        rec.endDate=ed;
+      }else{
+        delete rec.endDate;
       }
     }else{
       var dv=el.annivDownDate.value;
